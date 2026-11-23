@@ -4,7 +4,9 @@ using System.Text;
 
 namespace RpfPreview.Core;
 
-public sealed record ObjModelPart(string Name, RageModel Model, IReadOnlyDictionary<int, string> ColorMaps);
+public sealed record ObjMaterial(string? ColorMap = null, string? NormalMap = null, uint? BaseColorRgba = null);
+
+public sealed record ObjModelPart(string Name, RageModel Model, IReadOnlyDictionary<int, ObjMaterial> Materials);
 
 public sealed record ObjDocument(string Obj, string Mtl);
 
@@ -27,7 +29,8 @@ public static class ModelObjWriter
             {
                 obj.Append("g ").Append(partName).Append('_').Append(Token(mesh.Name)).Append('\n');
                 string material = partName + "_shader" + (mesh.ShaderIndex?.ToString(CultureInfo.InvariantCulture) ?? "none");
-                if (materials.Add(material)) AppendMaterial(mtl, material, mesh.ShaderIndex is int shader && part.ColorMaps.TryGetValue(shader, out var map) ? map : null);
+                if (materials.Add(material))
+                    AppendMaterial(mtl, material, mesh.ShaderIndex is int shader && part.Materials.TryGetValue(shader, out var found) ? found : null);
                 obj.Append("usemtl ").Append(material).Append('\n');
                 foreach (Vector3 p in mesh.Positions)
                     obj.Append("v ").Append(Number(p.X)).Append(' ').Append(Number(p.Y)).Append(' ').Append(Number(p.Z)).Append('\n');
@@ -53,13 +56,20 @@ public static class ModelObjWriter
         return new(obj.ToString(), mtl.ToString());
     }
 
-    private static void AppendMaterial(StringBuilder mtl, string name, string? colorMap)
+    private static void AppendMaterial(StringBuilder mtl, string name, ObjMaterial? material)
     {
         mtl.Append("newmtl ").Append(name).Append('\n');
-        mtl.Append("Ka 0 0 0\nKd 1 1 1\nKs 0 0 0\nillum 1\n");
-        if (colorMap is not null) mtl.Append("map_Kd ").Append(colorMap.Replace('\\', '/')).Append('\n');
+        mtl.Append("Ka 0 0 0\n");
+        if (material?.BaseColorRgba is uint rgba)
+            mtl.Append("Kd ").Append(Channel(rgba)).Append(' ').Append(Channel(rgba >> 8)).Append(' ').Append(Channel(rgba >> 16)).Append('\n');
+        else mtl.Append("Kd 1 1 1\n");
+        mtl.Append("Ks 0 0 0\nillum 1\n");
+        if (material?.ColorMap is { } color) mtl.Append("map_Kd ").Append(color.Replace('\\', '/')).Append('\n');
+        if (material?.NormalMap is { } normal) mtl.Append("map_Bump -bm 1 ").Append(normal.Replace('\\', '/')).Append('\n');
         mtl.Append('\n');
     }
+
+    private static string Channel(uint value) => ((value & 0xFF) / 255f).ToString("0.####", CultureInfo.InvariantCulture);
 
     private static string Token(string value)
     {

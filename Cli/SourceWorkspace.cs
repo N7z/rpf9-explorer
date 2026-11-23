@@ -40,7 +40,7 @@ public sealed class SourceWorkspace
         return new(documents, index);
     }
 
-    private static List<string> ExpandSources(IReadOnlyList<string> inputs)
+    public static List<string> ExpandSources(IReadOnlyList<string> inputs)
     {
         if (inputs.Count == 0) throw new UsageException("Give at least one archive, texture pool or folder.");
         var paths = new List<string>();

@@ -6,6 +6,8 @@ const string usage = """
     Usage:
       rpf9-cli search <source>... [options]
       rpf9-cli export <source>... --out <folder> [options]
+      rpf9-cli kits <source>... [options]
+      rpf9-cli scan <source>... [options]
       rpf9-cli help <command>
 
     Sources are .rpf archives, .ttpf texture pools, .zip files or folders that contain them.
@@ -41,6 +43,8 @@ try
     {
         "search" => SearchCommand.Run(rest, cancellation.Token),
         "export" => await ExportCommand.RunAsync(rest, cancellation.Token),
+        "kits" => KitsCommand.Run(rest, cancellation.Token),
+        "scan" => ScanCommand.Run(rest, cancellation.Token),
         "help" => Help(rest),
         "--version" or "version" => Version(),
         _ => throw new UsageException($"Unknown command '{command}'.")
@@ -70,6 +74,8 @@ int Help(IReadOnlyList<string> topic)
     {
         "search" => SearchCommand.Usage,
         "export" => ExportCommand.Usage,
+        "kits" => KitsCommand.Usage,
+        "scan" => ScanCommand.Usage,
         _ => usage
     });
     return ExitCodes.Success;
