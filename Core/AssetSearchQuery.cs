@@ -37,7 +37,7 @@ public sealed class AssetSearchQuery
         {
             bool match = term.Field switch {
                 "type" => TypeMatches(asset.Kind, term.Value),
-                "name" => term.Contains(asset.Name),
+                "name" => term.Contains(asset.Name) || asset.Entry.EmbeddedModelNames.Any(name => term.Contains(name)),
                 "source" or "archive" => term.Contains(asset.SourcePath),
                 "format" => term.Contains(asset.Format),
                 "key" => term.Contains(asset.KeyText, term.Value.Replace("0x", "", StringComparison.OrdinalIgnoreCase)),

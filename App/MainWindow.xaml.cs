@@ -472,12 +472,16 @@ public partial class MainWindow : Window
         public string SizeLabel => !Entry.CanExtract && SortSize == 0 ? "—" : FormatSize(SortSize);
         public string EntryToolTip => (Asset?.SourcePath ?? "") + "\n" + (Asset?.LogicalPath ?? Entry.Path) + (Entry.Limitation == null ? "" : "\n" + Entry.Limitation)
             + (Entry.IsNameCandidate ? "\nPath candidate matched by index hash" : "")
+            + (Entry.EmbeddedModelNames.Count > 0 ? "\nEmbedded models: " + string.Join(", ", Entry.EmbeddedModelNames.Take(12))
+                + (Entry.EmbeddedModelNames.Count > 12 ? "…" : "") : "")
             + (Entry.NameHash64 is { } hash64 ? "\n64-bit name hash: " + hash64 : "")
             + (Entry.NameHash32 is { } hash32 ? "\n32-bit name hash: " + hash32 : "")
             + (Asset?.PoolTexture?.PreviewNote is string note ? "\n" + note : "");
         public string OffsetLabel => Entry.Offset.ToString("X10");
         public string TypeLabel => Asset?.IsTextureChild == true ? "Texture" : Entry.Compression switch { "Recovered AWC" => "Audio bank", "Recovered model" => "Model", "Recovered texture dictionary" => "Texture folder", "RDS5 texture" => "Streaming texture", "Recovered raw deflate shader" => "Native shader", "Recovered clip dictionary" => "Clip dictionary", "Indexed child archive" => "Nested archive", "Indexed resource" => "RAGE resource", _ => Entry.Extension };
-        public string DisplayName => Asset?.Texture?.Name ?? (Asset?.Document.HasDecodedRpf9Index == true ? Entry.Name : Entry.ResourceDrawableOffset is int drawable
+        private string IndexedName => Entry.IsNameCandidate || Entry.EmbeddedModelNames.Count == 0 ? Entry.Name
+            : Entry.EmbeddedModelNames[0] + (Entry.EmbeddedModelNames.Count > 1 ? $" (+{Entry.EmbeddedModelNames.Count - 1})" : "");
+        public string DisplayName => Asset?.Texture?.Name ?? (Asset?.Document.HasDecodedRpf9Index == true ? IndexedName : Entry.ResourceDrawableOffset is int drawable
             ? Entry.Name.Split("_at_", StringSplitOptions.None)[0] + $" · child {drawable:X}"
             : Entry.Compression.StartsWith("Recovered Bink", StringComparison.Ordinal)
             ? "Movie " + Entry.Name.Split('_').ElementAtOrDefault(1) + Entry.Extension

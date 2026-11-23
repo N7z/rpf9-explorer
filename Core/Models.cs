@@ -15,6 +15,7 @@ public sealed record ArchiveEntry(string Path, long StoredSize, long Size, long 
     public int? ResourceDrawableOffset { get; init; }
     public string? NameHash32 { get; init; }
     public string? NameHash64 { get; init; }
+    public IReadOnlyList<string> EmbeddedModelNames { get; init; } = [];
     public bool IsNameCandidate { get; init; }
     public bool IsNestedArchive { get; init; }
     internal bool RequiresIndexDecoder { get; init; }

@@ -29,7 +29,7 @@ public sealed class WorkspaceAsset(ArchiveDocument Document, ArchiveEntry Entry,
         ? "upper body skin arms hands" : Name.StartsWith("feet_", StringComparison.OrdinalIgnoreCase)
         ? "lower body skin legs feet" : "";
     private string? _search;
-    public string SearchText => _search ??= string.Join(' ', Name, LogicalPath, SourceName, Kind, Format, Width.ToString(CultureInfo.InvariantCulture), Height.ToString(CultureInfo.InvariantCulture), KeyText, ComponentHint, Entry.NameHash32, Entry.NameHash64);
+    public string SearchText => _search ??= string.Join(' ', Name, LogicalPath, SourceName, Kind, Format, Width.ToString(CultureInfo.InvariantCulture), Height.ToString(CultureInfo.InvariantCulture), KeyText, ComponentHint, Entry.NameHash32, Entry.NameHash64, string.Join(' ', Entry.EmbeddedModelNames));
 }
 
 public sealed record WorkspaceIndexProgress(int Completed, int Total, string Source);

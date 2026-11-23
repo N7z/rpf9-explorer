@@ -28,7 +28,20 @@ The reader also decoded the indexes of 22 standalone RPF9 files, including the a
 
 Of the directly stored members, 797 had Bink movie headers and frame tables that agreed with their indexed lengths. Frame table checks covered offset order, bounds, and the final frame boundary. They did not decode the video frames.
 
-The survey decoded headers for all 4,351 directly stored child archives found in the standalone indexes. Those children contain 1,248,505 entry slots. Full payload checks for nested resources covered the `packs.rpf` children.
+The survey decoded headers for all 4,351 directly stored child archives found in the standalone indexes. Those children contain 1,248,505 entry slots.
+
+## Full read of the local archive set
+
+The local decoder read all 1,255,039 indexed entries across the 22 standalone archives and their 4,351 children. Every member produced its declared byte count. The pass verified 2,243,921 zlib chunk checksums, checked the lengths of 22,840 stored chunks, and found no further RPF9 child headers in the decoded member prefixes.
+
+| Storage | Entries read |
+| --- | ---: |
+| Directly stored | 76,826 |
+| Chunked data | 24,492 |
+| Chunked resources | 1,153,560 |
+| Raw DEFLATE | 161 |
+
+The pass processed 564,783,265,279 decoded bytes, counting each child archive as a member and then reading the entries inside it. Directly stored data was checked against index bounds and length. Asset interpretation, including geometry, materials, and audio formats, requires separate checks.
 
 ## Encrypted and compressed storage
 
@@ -55,4 +68,4 @@ The index stores 32-bit and 64-bit hashes of relative paths. Lookup treats recog
 
 Searching executable strings and decoded metadata produced candidates for 5,608 of the 6,534 standalone slots. Of those, 1,378 match both hashes and the entry type, including all 797 indexed movies. Another 4,230 child archive candidates match their available 64-bit hash and entry type. Some script matches identify a name stem and extension family. Original casing and unmatched paths remain unresolved.
 
-The desktop app can use a compatible [local decoder](rpf9-index-provider.md) to browse these indexes and view supported payloads. Full filename recovery, broader nested payload validation, and archive rebuilding remain open.
+Testing 458,892 unambiguous typed path candidates from the local metadata against the 1,248,505 nested slots produced no additional path matches. Drawable and fragment resources can carry their own model labels, and drawable dictionaries can carry several child labels. Across the 59 children of `packs.rpf`, the desktop reader found embedded names for all 27,288 recognized model entries, with 27,484 labels across those entries. These labels are searchable. Original archive paths and archive rebuilding remain open areas of work. See the [desktop decoder guide](rpf9-index-provider.md).

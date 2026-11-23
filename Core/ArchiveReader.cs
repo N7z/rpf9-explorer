@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
@@ -359,6 +360,8 @@ public static class ArchiveReader
             if (read == 0) throw new InvalidDataException("The member is truncated or its decoded length does not match its index.");
             output.Write(buffer, 0, read); remaining -= read;
         }
+        if (entry.Size <= maxBytes && source.Content.ReadByte() != -1)
+            throw new InvalidDataException("Decoded member exceeds its declared length.");
         return output.ToArray();
     }
 
@@ -532,19 +535,15 @@ public static class ArchiveReader
         public void Dispose() { Content.Dispose(); owner?.Dispose(); }
     }
 
-    internal static string? IdentifyIndexedResource(FileStream input, ArchiveEntry entry)
+    internal static (string? Kind, string[]? Names) IdentifyIndexedResource(FileStream input, ArchiveEntry entry)
     {
         if (entry.ResourceSystemBytes is not int systemSize || systemSize is < 64 or > RageModelDecoder.MaxSystemBytes
             || entry.Size <= systemSize || entry.Size > 256L * 1024 * 1024 || entry.Segments is not { Count: > 0 } segments)
-            return null;
+            return default;
         try
         {
             CheckIndexedPrefix(input, entry);
-            using var content = new ZlibSegmentsStream(segments, segment =>
-            {
-                input.Position = segment.Offset;
-                return new BoundedReadStream(input, segment.StoredSize, true);
-            });
+            using var content = OpenSegments(input, segments);
             Span<byte> buffer = stackalloc byte[512];
             Span<byte> system = buffer[..Math.Min(buffer.Length, systemSize)];
             content.ReadExactly(system);
@@ -554,17 +553,53 @@ public static class ArchiveReader
                 byte[] metadata = new byte[inspected];
                 system.CopyTo(metadata);
                 content.ReadExactly(metadata.AsSpan(system.Length));
+                system = metadata;
                 int graphicsSize = checked((int)(entry.Size - systemSize));
                 if (RageTextureDecoder.InspectMetadata(metadata, graphicsSize) != null)
-                    return "Recovered texture dictionary";
+                    return ("Recovered texture dictionary", null);
             }
-            if (RageModelDecoder.LooksLikeDrawable(system) || RageModelDecoder.LooksLikeFragment(system))
-                return "Recovered model";
-            if (RageModelDecoder.LooksLikeDrawableDictionary(system))
-                return "Recovered model";
+            bool dictionary = RageModelDecoder.LooksLikeDrawableDictionary(system);
+            if (dictionary || RageModelDecoder.LooksLikeDrawable(system) || RageModelDecoder.LooksLikeFragment(system))
+            {
+                return ("Recovered model", ReadIndexedModelNames(content, system, systemSize, dictionary));
+            }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or OverflowException) { }
-        return null;
+        return default;
+    }
+
+    private static string[]? ReadIndexedModelNames(Stream model, ReadOnlySpan<byte> prefix, int systemSize, bool dictionary)
+    {
+        int offset = 0, needed = systemSize;
+        if (!dictionary)
+        {
+            ulong pointer = BinaryPrimitives.ReadUInt64LittleEndian(prefix[168..]);
+            if (pointer < 0x50000000 || pointer - 0x50000000 >= (ulong)systemSize) return null;
+            offset = (int)(pointer - 0x50000000);
+            if (offset < prefix.Length && RageModelDecoder.DecodeModelName(prefix[offset..]) is { } early) return [early];
+            needed = Math.Min(systemSize, offset + 256);
+        }
+        var buffer = ArrayPool<byte>.Shared.Rent(needed);
+        try
+        {
+            var metadata = buffer.AsSpan(0, needed);
+            int buffered = Math.Min(prefix.Length, needed);
+            prefix[..buffered].CopyTo(metadata);
+            model.ReadExactly(metadata[buffered..]);
+            if (dictionary)
+                return RageModelDecoder.InspectDrawableDictionary(metadata)?.Select(child => child.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            return RageModelDecoder.DecodeModelName(metadata[offset..]) is { } name ? [name] : null;
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
+    }
+
+    private static ZlibSegmentsStream OpenSegments(FileStream file, IReadOnlyList<ArchiveSegment> segments, bool ownsFile = false)
+    {
+        return new(segments, segment =>
+        {
+            file.Position = segment.Offset;
+            return new BoundedReadStream(file, segment.StoredSize, true, requireZlibEnd: !segment.IsRaw);
+        }, ownsFile ? file : null);
     }
 
     private static void CheckIndexedPrefix(FileStream file, ArchiveEntry entry)
@@ -621,11 +656,7 @@ public static class ArchiveReader
                 foreach (var segment in segments)
                     if (segment.Offset < 0 || segment.StoredSize < (segment.IsRaw ? 1 : 6) || segment.Offset > file.Length || segment.StoredSize > file.Length - segment.Offset)
                         throw new InvalidDataException("Recovered block is outside the archive.");
-                return new(new ZlibSegmentsStream(segments, segment =>
-                {
-                    file.Position = segment.Offset;
-                    return new BoundedReadStream(file, segment.StoredSize, true);
-                }, file));
+                return new(OpenSegments(file, segments, ownsFile: true));
             }
             file.Position = entry.Offset;
             Stream bounded = new BoundedReadStream(file, doc.HasDecodedRpf9Index ? entry.Size : entry.StoredSize);
@@ -635,24 +666,30 @@ public static class ArchiveReader
         catch { file.Dispose(); throw; }
     }
 
-    private sealed class BoundedReadStream(Stream inner, long remaining, bool leaveOpen = false) : Stream
+    private sealed class BoundedReadStream(Stream inner, long remaining, bool leaveOpen = false, bool requireZlibEnd = false) : Stream
     {
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            int read = inner.Read(buffer, offset, (int)Math.Min(count, remaining)); remaining -= read; return read;
-        }
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
         public override int Read(Span<byte> buffer)
         {
-            int read = inner.Read(buffer[..(int)Math.Min(buffer.Length, remaining)]); remaining -= read; return read;
+            int read = inner.Read(buffer[..(int)Math.Min(buffer.Length, remaining)]);
+            return CountRead(read, buffer.Length);
         }
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
         {
-            int read = await inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, remaining)], token); remaining -= read; return read;
+            int read = await inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, remaining)], token);
+            return CountRead(read, buffer.Length);
+        }
+        private int CountRead(int read, int requested)
+        {
+            if (requireZlibEnd && requested != 0 && read == 0)
+                throw new InvalidDataException("Compressed archive block ended before its zlib stream was complete.");
+            remaining -= read;
+            return read;
         }
         protected override void Dispose(bool disposing) { if (disposing && !leaveOpen) inner.Dispose(); base.Dispose(disposing); }
         public override void Flush() { }

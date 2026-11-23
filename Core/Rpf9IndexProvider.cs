@@ -73,8 +73,8 @@ public sealed class Rpf9IndexProvider
         foreach (var entry in entries.Where(e => e.IsResource && e.CanExtract).OrderBy(e => e.Offset))
         {
             token.ThrowIfCancellationRequested();
-            string? kind = ArchiveReader.IdentifyIndexedResource(input, entry);
-            if (kind != null) entries[entry.Index] = entry with { Compression = kind };
+            var (kind, names) = ArchiveReader.IdentifyIndexedResource(input, entry);
+            if (kind != null) entries[entry.Index] = entry with { Compression = kind, EmbeddedModelNames = names ?? [] };
         }
         var metadata = new Dictionary<string, string>
         {
@@ -187,7 +187,8 @@ public sealed class Rpf9IndexProvider
     internal Stream DecodePayload(ArchiveDocument document, Rpf9IndexedSource source, ArchiveEntry entry, long length, CancellationToken token)
     {
         if (length is < 0 or > MaxDecodedPayload) throw new InvalidDataException("Decoded member exceeds the local decoder limit.");
-        var output = new FileStream(Path.Combine(Path.GetTempPath(), "rpf9-preview-" + Guid.NewGuid().ToString("N") + ".tmp"),
+        string path = LocalPath.Require(Path.Combine(Path.GetTempPath(), "rpf9-preview-" + Guid.NewGuid().ToString("N") + ".tmp"));
+        var output = new FileStream(path,
             FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 65536, FileOptions.DeleteOnClose);
         try
         {

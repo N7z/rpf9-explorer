@@ -4,6 +4,8 @@ Use **File > Configure local RPF9 decoder** to select a configuration for a comp
 
 Double-click a nested archive row to browse it. Use **Up** at the child archive's root to return to its parent. Saving a workspace also saves the active child location. Name candidates are labelled in the row tooltip. Search for a path or use `hash:` with a 32-bit or 64-bit name hash.
 
+Search by an embedded model name with the search box or the `name:` filter. For indexed models without a matched path, the file list shows the embedded name when available. For a drawable dictionary with several names, the row shows the first name and the number of additional names. All child names are searchable. Hover over the row to see its archive path, hashes, and model names. Extraction uses the indexed path.
+
 Supported entries use the app's existing preview and extraction controls. Movie and AWC entries open the existing players when the required tools are installed. Recognized resource layouts open in the model or texture viewer. Other readable resources can be inspected as bytes and extracted as decoded sections. Staged replacements remain in the workspace.
 
 Keep archives, workspace files, decoder inputs, and extraction destinations on local drives. Network paths, mapped network drives, filesystem links, and offline placeholders are rejected.

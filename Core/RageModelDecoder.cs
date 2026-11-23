@@ -295,6 +295,20 @@ public static class RageModelDecoder
     }
 
     private static bool SystemPointer(ulong p) => p >= 0x50000000 && p < 0x50000000UL + MaxSystemBytes;
+
+    internal static string? DecodeModelName(ReadOnlySpan<byte> bytes)
+    {
+        int terminator = bytes[..Math.Min(bytes.Length, 256)].IndexOf((byte)0);
+        if (terminator <= 0) return null;
+        try
+        {
+            string name = ModelNameEncoding.GetString(bytes[..terminator]);
+            return name.Any(char.IsControl) ? null : name;
+        }
+        catch (DecoderFallbackException) { return null; }
+    }
+
+    private static readonly UTF8Encoding ModelNameEncoding = new(false, true);
     private static Vector3 ReadVector(ReadOnlySpan<byte> bytes, int at) => new(
         BinaryPrimitives.ReadSingleLittleEndian(bytes[at..]),
         BinaryPrimitives.ReadSingleLittleEndian(bytes[(at + 4)..]),
@@ -660,11 +674,7 @@ public static class RageModelDecoder
         private string ReadName(int pointerAt)
         {
             int at = S(pointerAt), available = Math.Min(256, sys.Length - at);
-            int terminator = sys.Slice(at, available).IndexOf((byte)0);
-            Require(terminator is > 0 and < 256);
-            string name = new UTF8Encoding(false, true).GetString(sys.Slice(at, terminator));
-            foreach (char c in name) Require(!char.IsControl(c));
-            return name;
+            return DecodeModelName(sys.Slice(at, available)) ?? throw new InvalidDataException("Invalid embedded model name.");
         }
 
         private int? ReadShaderMapping(int model, int count, int? materialCount)
