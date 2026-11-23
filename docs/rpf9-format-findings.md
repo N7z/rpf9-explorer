@@ -24,10 +24,14 @@ The local research reader now uses the index to find member offsets and sizes. I
 
 The 59 nested headers in `packs.rpf` contain 80,298 entry slots. The local reader checked all 485 nested data members and all 79,813 resource payloads. The full resource pass produced 9,722,110,144 decoded bytes. All 143,017 zlib chunks passed checksum validation, all 1,157 raw chunks matched their declared sizes, and every payload matched its declared system and graphics lengths.
 
-The reader also decoded the indexes of 22 standalone RPF9 files, including the animation, audio, level, movie, shader, and texture archives. The 6,534 top-level slots in this survey include 5,150 directly stored members, 1,383 chunked data members, and one chunked resource. These are index counts. They include child archives as slots.
+The reader also decoded the indexes of 22 standalone RPF9 files, including the animation, audio, level, movie, shader, and texture archives. The 6,534 top-level slots in this survey include 5,150 directly stored members, 1,383 chunked data members, and one chunked resource. All 1,384 chunked payloads passed their length and codec checks.
+
+Of the directly stored members, 797 had Bink movie headers and frame tables that agreed with their indexed lengths. Frame table checks covered offset order, bounds, and the final frame boundary. They did not decode the video frames.
 
 ## Looking up names
 
-The index stores 32-bit and 64-bit hashes of relative paths. Lookup treats recognized extensions as a separate type and normalizes ASCII case and slash direction. Tests against isolated native instructions covered 339 hash comparisons. Seven candidate paths for `common.rpf` matched both hashes and the entry type. Entries without a matching candidate remain identifiable by hash and slot number.
+The index stores 32-bit and 64-bit hashes of relative paths. Lookup treats recognized extensions as a separate type and normalizes ASCII case and slash direction. Tests against isolated native instructions covered 339 hash comparisons.
+
+Scanning text and metadata in 533 verified root members yielded 246 additional path candidates. Across both searches, 194 candidates for `common.rpf` match both hashes and the entry type. All 59 nested archives in `packs.rpf` have candidates that match their available 64-bit hash and RPF entry type. These matches name 253 of the 592 entries in the three original samples. Remaining entries can still be identified by hash and slot number.
 
 The desktop app still discovers supported payloads by scanning archives. The research reader is separate. Full filename recovery, support for other storage layouts, archive authentication, and archive rebuilding remain open.
