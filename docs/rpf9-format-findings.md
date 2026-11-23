@@ -22,7 +22,9 @@ The local research reader now uses the index to find member offsets and sizes. I
 | `common.rpf` | 418 | 149 | 0 |
 | `packs.rpf` | 113 | 11 | 59 |
 
-The 59 nested headers in `packs.rpf` contain 80,298 entry slots. The local reader checked all 485 nested data members that use the supported chunk layout. The remaining 79,813 slots use a resource layout with separate decoded system and graphics sizes. Their stored ranges and chunk length totals fit the index. A bounded sample of 232 resource payloads decoded successfully and matched the declared sizes. The rest of the resource payloads still need byte-level validation.
+The 59 nested headers in `packs.rpf` contain 80,298 entry slots. The local reader checked all 485 nested data members and all 79,813 resource payloads. The full resource pass produced 9,722,110,144 decoded bytes. All 143,017 zlib chunks passed checksum validation, all 1,157 raw chunks matched their declared sizes, and every payload matched its declared system and graphics lengths.
+
+The reader also decoded the indexes of 22 standalone RPF9 files, including the animation, audio, level, movie, shader, and texture archives. The 6,534 top-level slots in this survey include 5,150 directly stored members, 1,383 chunked data members, and one chunked resource. These are index counts. They include child archives as slots.
 
 ## Looking up names
 
