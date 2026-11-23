@@ -22,7 +22,7 @@ The local research reader now uses the index to find member offsets and sizes. I
 | `common.rpf` | 418 | 149 | 0 |
 | `packs.rpf` | 113 | 11 | 59 |
 
-The 59 nested headers in `packs.rpf` contain 80,298 entry slots. Those checks covered the child headers and their table bounds. Payload validation covered the 533 chunked members in the root archives.
+The 59 nested headers in `packs.rpf` contain 80,298 entry slots. The local reader checked all 485 nested data members that use the supported chunk layout. The remaining 79,813 slots use a resource layout with separate decoded system and graphics sizes. Their stored ranges and chunk length totals fit the index. A bounded sample of 232 resource payloads decoded successfully and matched the declared sizes. The rest of the resource payloads still need byte-level validation.
 
 ## Looking up names
 
