@@ -13,6 +13,12 @@ public sealed record ArchiveEntry(string Path, long StoredSize, long Size, long 
     public IReadOnlyList<ArchiveSegment>? Segments { get; init; }
     public int? ResourceSystemBytes { get; init; }
     public int? ResourceDrawableOffset { get; init; }
+    public string? NameHash32 { get; init; }
+    public string? NameHash64 { get; init; }
+    public bool IsNameCandidate { get; init; }
+    public bool IsNestedArchive { get; init; }
+    internal bool RequiresIndexDecoder { get; init; }
+    internal int IndexedPrefixBytes { get; init; }
     public bool CanExtract => !IsDirectory && !IsEncrypted && Limitation is null;
 }
 
@@ -42,6 +48,11 @@ public sealed class ArchiveDocument
     public byte[] HeaderBytes { get; }
     public bool SupportsMembers { get; }
     public TtpfInfo? TexturePool { get; internal init; }
+    internal Rpf9IndexedSource? IndexedRpf9Source { get; init; }
+    public bool HasDecodedRpf9Index => IndexedRpf9Source != null;
+    public ArchiveDocument? ParentArchive => IndexedRpf9Source?.Parent;
+    public IReadOnlyList<int> NestedArchiveSlots => IndexedRpf9Source == null ? Array.Empty<int>() : Array.AsReadOnly(IndexedRpf9Source.Trail);
+    public string ArchiveLocation => IndexedRpf9Source?.Label ?? System.IO.Path.GetFileName(SourcePath);
     public byte[] ReadPreview(ArchiveEntry entry, int maxBytes = 2 * 1024 * 1024, CancellationToken cancellationToken = default)
         => ArchiveReader.ReadPreview(this, entry, maxBytes, cancellationToken);
     public Task ExtractAsync(IEnumerable<ArchiveEntry> entries, string destination,

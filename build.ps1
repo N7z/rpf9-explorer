@@ -8,6 +8,9 @@ Copy-Item -LiteralPath (Join-Path $rpfProjectRoot 'README.txt') -Destination (Jo
 Copy-Item -LiteralPath (Join-Path $rpfProjectRoot 'README.md') -Destination (Join-Path $rpfPublishPath 'README.md')
 $rpfScreenshotOutput = Join-Path $rpfPublishPath 'docs\screenshots'
 New-Item -ItemType Directory -Path $rpfScreenshotOutput -Force | Out-Null
+foreach ($rpfDoc in @('rpf9-format-findings.md','rpf9-index-provider.md')) {
+    Copy-Item -LiteralPath (Join-Path $rpfProjectRoot ('docs\' + $rpfDoc)) -Destination (Join-Path $rpfPublishPath ('docs\' + $rpfDoc))
+}
 foreach ($rpfScreenshotName in @('texture-search.png','texture-dictionary.png','model-preview.png','staged-texture.png','character-parts.png','model-assembly.png')) {
     Copy-Item -LiteralPath (Join-Path $rpfProjectRoot ('docs\screenshots\' + $rpfScreenshotName)) -Destination (Join-Path $rpfScreenshotOutput $rpfScreenshotName)
 }

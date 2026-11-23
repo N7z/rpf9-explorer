@@ -14,7 +14,7 @@ public sealed class WorkspaceAsset(ArchiveDocument Document, ArchiveEntry Entry,
     public string Name => Texture?.Name ?? Entry.Name;
     public bool IsTextureChild => Texture != null;
     public bool IsImage => Texture != null || PoolTexture != null || Entry.Extension is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".dds";
-    public string Kind => IsImage ? "image" : Entry.Compression switch { "Recovered model" => "model", "Recovered AWC" => "audio", "Recovered raw deflate shader" => "shader", "Recovered texture dictionary" => "dictionary", "Recovered clip dictionary" => "animation", _ => "file" };
+    public string Kind => IsImage ? "image" : Entry.Compression switch { "Recovered model" => "model", "Recovered AWC" => "audio", "Recovered raw deflate shader" => "shader", "Recovered texture dictionary" => "dictionary", "Recovered clip dictionary" => "animation", "Recovered Bink" or "Recovered Bink2" => "video", "Indexed child archive" => "archive", _ => "file" };
     public long Size => Texture is { } t ? RageTextureDecoder.DdsFileSize(t) : Entry.Size;
     public int Width => Texture?.Width ?? PoolTexture?.Width ?? 0;
     public int Height => Texture?.Height ?? PoolTexture?.Height ?? 0;
@@ -29,7 +29,7 @@ public sealed class WorkspaceAsset(ArchiveDocument Document, ArchiveEntry Entry,
         ? "upper body skin arms hands" : Name.StartsWith("feet_", StringComparison.OrdinalIgnoreCase)
         ? "lower body skin legs feet" : "";
     private string? _search;
-    public string SearchText => _search ??= string.Join(' ', Name, LogicalPath, SourceName, Kind, Format, Width.ToString(CultureInfo.InvariantCulture), Height.ToString(CultureInfo.InvariantCulture), KeyText, ComponentHint);
+    public string SearchText => _search ??= string.Join(' ', Name, LogicalPath, SourceName, Kind, Format, Width.ToString(CultureInfo.InvariantCulture), Height.ToString(CultureInfo.InvariantCulture), KeyText, ComponentHint, Entry.NameHash32, Entry.NameHash64);
 }
 
 public sealed record WorkspaceIndexProgress(int Completed, int Total, string Source);

@@ -16,6 +16,8 @@
     <MenuItem Header="_Open archive…" InputGestureText="Ctrl+O" Command="{Binding OpenCommand}"/>
     <MenuItem Header="Open _folder…" Click="OpenFolder_Click"/>
     <MenuItem Header="Open _workspace…" Click="OpenWorkspace_Click"/>
+    <MenuItem Header="Configure local RPF9 _decoder…" Click="ConfigureIndexedDecoder_Click"/>
+    <MenuItem Header="Use recovery scans for new opens" Click="DisableIndexedDecoder_Click"/>
     <MenuItem Header="Assembled _wardrobe…" Click="OpenWardrobe_Click"/>
     <MenuItem Header="_Save workspace and edits…" InputGestureText="Ctrl+S" Command="{Binding SaveCommand}"/>
     <MenuItem Header="Clear loaded sources" Click="ClearWorkspace_Click"/>
@@ -40,7 +42,7 @@
     <Button x:Name="SaveWorkspaceButton" Content="Save workspace…" Click="SaveWorkspace_Click" IsEnabled="False" Margin="0,0,14,0"/>
     <Button x:Name="ExtractSelectedButton" Content="Extract selected…" Click="ExtractSelected_Click" IsEnabled="False" ToolTipService.ShowOnDisabled="True" Margin="0,0,6,0"/>
     <Button x:Name="ExtractAllButton" Content="Extract all…" Click="ExtractAll_Click" IsEnabled="False"/>
-    <Button x:Name="ScanArchiveButton" Content="Scan entire archive…" Click="ScanArchive_Click" IsEnabled="False" Margin="18,0,0,0" ToolTip="Read the whole RPF9 file and cache supported model, texture and audio payloads. The original directory remains undecoded."/>
+    <Button x:Name="ScanArchiveButton" Content="Scan entire archive…" Click="ScanArchive_Click" IsEnabled="False" Margin="18,0,0,0" ToolTip="Switch to recovery mode and scan the source file for supported payloads."/>
     <Button x:Name="StageReplacementButton" Content="Stage replacement…" Click="StageReplacement_Click" IsEnabled="False" Margin="18,0,0,0" ToolTip="Import a replacement into a separate project; RPF9 archive writing is not decoded yet."/>
     <TextBlock x:Name="ReplacementProjectText" Text="" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource AppMutedText}" TextTrimming="CharacterEllipsis" MaxWidth="200"/>
    </StackPanel>

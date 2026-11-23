@@ -2,9 +2,9 @@
 
 A Windows desktop viewer for RPF archives and game assets. Open multiple archives or a folder, search textures, preview models and media, export files, and save replacement projects.
 
-RPF9 support is partial. The original archive directory is not decoded, and the app cannot rebuild a complete RPF9 archive. Model texture support is still being improved.
+RPF9 can open in indexed mode with a compatible local decoder, or use the built-in recovery scans. Indexed mode browses the native member table, including nested archives, and reads supported stored, chunked, and transformed members. Archive rebuilding remains unavailable.
 
-See the [RPF9 research notes](docs/rpf9-format-findings.md) for verified progress on decoding the archive index. The desktop app still uses its existing recovery scans.
+See the [RPF9 research notes](docs/rpf9-format-findings.md) for the format findings and the [local decoder guide](docs/rpf9-index-provider.md) for setup.
 
 ## About GTA 6
 
@@ -24,7 +24,9 @@ Extract the Windows build ZIP and run `rpf9-explorer.exe`. Keep the `Tools` and 
 
 Opening more files adds them to the current workspace. Use **File > Clear loaded sources** to start over. A workspace can hold up to 512 source files.
 
-Select a source or folder on the left to browse it. Model discovery now checks the entire RPF9 file on first open, including drawable dictionaries that contain character components. Older model indexes are refreshed automatically, while validated earlier models are retained. Progress is shown and discovery can be canceled. Large archives can take a while on the first pass; later opens use the saved index. **Scan entire archive** also searches other supported payload types. These scans do not decode the original archive directory.
+Select a source or folder on the left to browse it. With a local decoder configured, double-click a nested archive row to open its index and use **Up** to return to its parent. Files with a matched path candidate show that name. Other entries show a slot number and name hash. Read the header signature result in the archive information.
+
+In recovery mode, model discovery searches the RPF9 file on first open, including drawable dictionaries that contain character components. Later opens use the saved scan results. **Scan entire archive** switches to recovery mode for that source and searches other supported payloads.
 
 ## Find and preview textures
 

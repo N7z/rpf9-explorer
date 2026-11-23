@@ -40,7 +40,9 @@ public sealed class AssetSearchQuery
                 "name" => term.Contains(asset.Name),
                 "source" or "archive" => term.Contains(asset.SourcePath),
                 "format" => term.Contains(asset.Format),
-                "key" or "hash" => term.Contains(asset.KeyText, term.Value.Replace("0x", "", StringComparison.OrdinalIgnoreCase)),
+                "key" => term.Contains(asset.KeyText, term.Value.Replace("0x", "", StringComparison.OrdinalIgnoreCase)),
+                "hash" => term.Contains(string.Join(' ', asset.KeyText, asset.Entry.NameHash32, asset.Entry.NameHash64),
+                    term.Value.Replace("0x", "", StringComparison.OrdinalIgnoreCase)),
                 "width" or "w" => Number(asset.Width, term.Value),
                 "height" or "h" => Number(asset.Height, term.Value),
                 "mips" => Number(asset.Mips, term.Value),
@@ -56,6 +58,7 @@ public sealed class AssetSearchQuery
         "models" or "model" => kind == "model", "sounds" or "audio" => kind == "audio",
         "shaders" or "shader" => kind == "shader", "containers" or "dictionary" => kind == "dictionary",
         "animations" or "clips" => kind == "animation",
+        "videos" or "movies" => kind == "video", "archives" => kind == "archive",
         "all" => true, _ => string.Equals(kind, value, StringComparison.OrdinalIgnoreCase)
     };
     private static bool Number(long actual, string expression)

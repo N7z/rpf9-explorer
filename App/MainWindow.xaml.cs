@@ -38,6 +38,7 @@ public partial class MainWindow : Window
         DarkModeSwitch.IsChecked = AppTheme.IsDark;
         DataContext = this;
         FilesGrid.ItemsSource = _rows;
+        LoadIndexedDecoder();
         Closing += WaitForPoolCopyOnClosing;
         Closed += (_, _) => { _previewCancellation?.Cancel(); CancelThumbnails(); _searchTimer?.Stop(); ClosePlayer(); _workCancellation?.Cancel(); };
     }
@@ -126,7 +127,7 @@ public partial class MainWindow : Window
         if (text.Length > 0) rows = rows.Where(r => r.Asset != null && query.Matches(r.Asset));
         var filtered = rows.OrderBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.SourceLabel, StringComparer.OrdinalIgnoreCase).ToArray();
         _rows.Replace(filtered);
-        FolderPathText.Text = global ? "Search all loaded sources" : (_scopeSource == null ? "All loaded sources" : Path.GetFileName(_scopeSource.SourcePath))
+        FolderPathText.Text = global ? "Search all loaded sources" : (_scopeSource == null ? "All loaded sources" : _scopeSource.ArchiveLocation)
             + (_selectedFolder == null ? "" : " / " + _selectedFolder) + (_scopeContainer == null ? "" : " / " + _scopeContainer.Name);
         UpFolderButton.IsEnabled = _scopeSource != null || _selectedFolder != null || _scopeContainer != null;
         FileCountText.Text = $"{filtered.Length:N0} assets · {filtered.Select(r => r.Asset?.SourcePath).Distinct().Count():N0} sources";
@@ -172,6 +173,12 @@ public partial class MainWindow : Window
                 _activePreview = PreviewTtpfAsync(document, entry, cancellation.Token); await _activePreview; return;
             }
             if (!entry.CanExtract) throw new NotSupportedException(entry.Limitation ?? "This file is encrypted. Its contents cannot be previewed without a compatible decoder and key.");
+            if (entry.IsNestedArchive)
+            {
+                TextPreview.Text = "Nested RPF9 archive. Double-click the row to open its index.";
+                PreviewFootnoteText.Text = "Use Up to return to the parent archive.";
+                return;
+            }
             if (document.Format == "RPF9" && entry.Compression.StartsWith("Recovered Bink", StringComparison.Ordinal)
                 && entry.Extension is ".bk2" or ".bik")
             {
@@ -230,7 +237,9 @@ public partial class MainWindow : Window
                 PreviewMetaText.Text += $" · {bitmap.PixelWidth} × {bitmap.PixelHeight} preview";
             }
             var limited = bytes.Length >= limit && entry.Size > bytes.Length;
-            PreviewFootnoteText.Text = $"{(limited ? "Preview limited to " : "Read ")}{FormatSize(bytes.Length)} · " + (IsRecovery ? "recovered stream; original name unknown" : "source unchanged");
+            PreviewFootnoteText.Text = $"{(limited ? "Preview limited to " : "Read ")}{FormatSize(bytes.Length)} · "
+                + (document.HasDecodedRpf9Index ? entry.IsNameCandidate ? "path candidate matched by index hash" : "identified by index slot and hash"
+                    : IsRecovery ? "recovered stream; original name unknown" : "source unchanged");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -443,10 +452,13 @@ public partial class MainWindow : Window
         public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         public string SizeLabel => !Entry.CanExtract && SortSize == 0 ? "—" : FormatSize(SortSize);
         public string EntryToolTip => (Asset?.SourcePath ?? "") + "\n" + (Asset?.LogicalPath ?? Entry.Path) + (Entry.Limitation == null ? "" : "\n" + Entry.Limitation)
+            + (Entry.IsNameCandidate ? "\nPath candidate matched by index hash" : "")
+            + (Entry.NameHash64 is { } hash64 ? "\n64-bit name hash: " + hash64 : "")
+            + (Entry.NameHash32 is { } hash32 ? "\n32-bit name hash: " + hash32 : "")
             + (Asset?.PoolTexture?.PreviewNote is string note ? "\n" + note : "");
         public string OffsetLabel => Entry.Offset.ToString("X10");
-        public string TypeLabel => Asset?.IsTextureChild == true ? "Texture" : Entry.Compression switch { "Recovered AWC" => "Audio bank", "Recovered model" => "Model", "Recovered texture dictionary" => "Texture folder", "RDS5 texture" => "Streaming texture", "Recovered raw deflate shader" => "Native shader", "Recovered clip dictionary" => "Clip dictionary", _ => Entry.Extension };
-        public string DisplayName => Asset?.Texture?.Name ?? (Entry.ResourceDrawableOffset is int drawable
+        public string TypeLabel => Asset?.IsTextureChild == true ? "Texture" : Entry.Compression switch { "Recovered AWC" => "Audio bank", "Recovered model" => "Model", "Recovered texture dictionary" => "Texture folder", "RDS5 texture" => "Streaming texture", "Recovered raw deflate shader" => "Native shader", "Recovered clip dictionary" => "Clip dictionary", "Indexed child archive" => "Nested archive", "Indexed resource" => "RAGE resource", _ => Entry.Extension };
+        public string DisplayName => Asset?.Texture?.Name ?? (Asset?.Document.HasDecodedRpf9Index == true ? Entry.Name : Entry.ResourceDrawableOffset is int drawable
             ? Entry.Name.Split("_at_", StringSplitOptions.None)[0] + $" · child {drawable:X}"
             : Entry.Compression.StartsWith("Recovered Bink", StringComparison.Ordinal)
             ? "Movie " + Entry.Name.Split('_').ElementAtOrDefault(1) + Entry.Extension

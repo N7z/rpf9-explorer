@@ -14,11 +14,16 @@ public static class ArchiveReader
     {
         ValidateEntry(document, entry);
         if (!entry.Compression.StartsWith("Recovered Bink", StringComparison.Ordinal)) return null;
-        var info = Rpf9MediaRecovery.Inspect(document.SourcePath, entry);
+        if (document.IndexedRpf9Source is { } indexed)
+        {
+            using var source = File.Open(document.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+            indexed.CheckHeader(source, document.FileSize);
+        }
+        var info = Rpf9MediaRecovery.Inspect(document.SourcePath, entry with { StoredSize = entry.Size });
         return info is null ? null : new(info.Width, info.Height, info.FramesPerSecond, info.DurationSeconds, info.Frames, info.AudioTracks);
     }
 
-    public static ArchiveDocument Open(string path)
+    public static ArchiveDocument Open(string path, Rpf9IndexProvider? indexProvider = null, CancellationToken token = default)
     {
         path = System.IO.Path.GetFullPath(path);
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
@@ -29,6 +34,8 @@ public static class ArchiveReader
         if ((magic & 0xffff) == 0x4b50) return OpenZip(path, stream.Length, header);
         if (magic == 0x35534452) return OpenTtpf(path, stream.Length, header);
         if (magic == 0x52504637) return OpenRpf7(path, stream, header);
+        if (magic == 0x52504639 && indexProvider != null)
+            return indexProvider.Open(path, [], 0, stream.Length, Path.GetFileName(path), null, token);
         if (magic == 0x52504639 || magic == 0x39465052)
             return OpenRpf9(path, stream.Length, header,
                 "RPF9 recognized, but this build cannot decode its file directory. No complete Bink movies, XML documents or PSIN metadata were recovered within the search limits. " +
@@ -44,6 +51,17 @@ public static class ArchiveReader
             return OpaqueRpf(path, stream.Length, header, "RPF" + (char)header[3],
                 "This RPF version is not supported by the member decoder in this build. Header inspection is available.");
         throw new InvalidDataException("Unrecognized archive signature. Supported readers: ZIP, open little-endian RPF7, and supported RDS5 texture pools. RPF9 supports partial recovery of specific embedded formats.");
+    }
+
+    public static ArchiveDocument OpenNestedRpf9(ArchiveDocument parent, ArchiveEntry entry, CancellationToken token = default)
+    {
+        ValidateEntry(parent, entry);
+        if (parent.IndexedRpf9Source is not { } indexed || !entry.IsNestedArchive || indexed.Trail.Length >= 16)
+            throw new NotSupportedException("Select a directly stored nested RPF9 archive within the depth limit.");
+        using var stream = File.Open(parent.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+        indexed.CheckHeader(stream, parent.FileSize);
+        return indexed.Provider.Open(parent.SourcePath, [.. indexed.Trail, entry.Index], entry.Offset, entry.Size,
+            $"{indexed.Label} / {entry.Name}", parent, token);
     }
 
     private static ArchiveDocument OpenTtpf(string path, long length, byte[] header)
@@ -328,7 +346,7 @@ public static class ArchiveReader
     {
         ValidateEntry(doc, entry);
         if (maxBytes < 1 || maxBytes > 16 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(maxBytes));
-        using var source = OpenSource(doc, entry, token);
+        using var source = OpenSource(doc, entry, token, maxBytes);
         using var output = new MemoryStream();
         byte[] buffer = new byte[Math.Min(maxBytes, 64 * 1024)];
         long remaining = Math.Min(entry.Size, maxBytes);
@@ -366,6 +384,20 @@ public static class ArchiveReader
         ValidateEntry(doc, entry);
         if (entry.Compression != "Recovered model" || entry.ResourceSystemBytes is not int size || size is < 1 or > RageModelDecoder.MaxSystemBytes || entry.Segments is not { Count: > 0 })
             throw new InvalidDataException("A validated native model system section is required.");
+        if (doc.HasDecodedRpf9Index)
+        {
+            using var indexed = OpenSource(doc, entry, token, size);
+            var system = new byte[size];
+            int bytesRead = 0;
+            while (bytesRead < size)
+            {
+                token.ThrowIfCancellationRequested();
+                int count = indexed.Content.Read(system, bytesRead, Math.Min(65536, size - bytesRead));
+                if (count == 0) throw new InvalidDataException("The indexed model system section is truncated.");
+                bytesRead += count;
+            }
+            return system;
+        }
         var segments = new List<ArchiveSegment>(); long remaining = size;
         foreach (var segment in entry.Segments)
         {
@@ -474,7 +506,10 @@ public static class ArchiveReader
 
     private static void ValidateEntry(ArchiveDocument doc, ArchiveEntry entry)
     {
-        if (!doc.SupportsMembers || !doc.Entries.Contains(entry)) throw new InvalidDataException("Entry does not belong to a supported archive.");
+        bool belongs = doc.HasDecodedRpf9Index
+            ? entry.Index >= 0 && entry.Index < doc.Entries.Count && doc.Entries[entry.Index] == entry
+            : doc.Entries.Contains(entry);
+        if (!doc.SupportsMembers || !belongs) throw new InvalidDataException("Entry does not belong to a supported archive.");
         if (!entry.CanExtract) throw new NotSupportedException(entry.Limitation ?? (entry.IsEncrypted ? "This member is encrypted. No decryption keys are included." : "Select a file to preview."));
     }
 
@@ -500,7 +535,51 @@ public static class ArchiveReader
         public void Dispose() { Content.Dispose(); owner?.Dispose(); }
     }
 
-    private static Source OpenSource(ArchiveDocument doc, ArchiveEntry entry, CancellationToken token = default)
+    internal static string? IdentifyIndexedResource(FileStream input, ArchiveEntry entry)
+    {
+        if (entry.ResourceSystemBytes is not int systemSize || systemSize is < 64 or > RageModelDecoder.MaxSystemBytes
+            || entry.Size <= systemSize || entry.Size > 256L * 1024 * 1024 || entry.Segments is not { Count: > 0 } segments)
+            return null;
+        try
+        {
+            CheckIndexedPrefix(input, entry);
+            using var content = new ZlibSegmentsStream(segments, segment =>
+            {
+                input.Position = segment.Offset;
+                return new BoundedReadStream(input, segment.StoredSize, true);
+            });
+            Span<byte> buffer = stackalloc byte[512];
+            Span<byte> system = buffer[..Math.Min(buffer.Length, systemSize)];
+            content.ReadExactly(system);
+            if (systemSize <= RageTextureDecoder.MaxSystemBytes && RageTextureDecoder.LooksLikeDictionary(system))
+            {
+                int inspected = Math.Min(systemSize, 64 * 1024);
+                byte[] metadata = new byte[inspected];
+                system.CopyTo(metadata);
+                content.ReadExactly(metadata.AsSpan(system.Length));
+                int graphicsSize = checked((int)(entry.Size - systemSize));
+                if (RageTextureDecoder.InspectMetadata(metadata, graphicsSize) != null)
+                    return "Recovered texture dictionary";
+            }
+            if (RageModelDecoder.LooksLikeDrawable(system) || RageModelDecoder.LooksLikeFragment(system))
+                return "Recovered model";
+            if (RageModelDecoder.LooksLikeDrawableDictionary(system))
+                return "Recovered model";
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or OverflowException) { }
+        return null;
+    }
+
+    private static void CheckIndexedPrefix(FileStream file, ArchiveEntry entry)
+    {
+        if (entry.IndexedPrefixBytes == 0) return;
+        file.Position = entry.Offset;
+        Span<byte> prefix = stackalloc byte[16];
+        file.ReadExactly(prefix);
+        if (prefix.ContainsAnyExcept((byte)0)) throw new InvalidDataException("Unsupported indexed resource prefix.");
+    }
+
+    private static Source OpenSource(ArchiveDocument doc, ArchiveEntry entry, CancellationToken token = default, long previewLimit = long.MaxValue)
     {
         token.ThrowIfCancellationRequested();
         if (doc.Format == "RDS5")
@@ -529,10 +608,20 @@ public static class ArchiveReader
         try
         {
             if (file.Length != doc.FileSize) throw new InvalidDataException("Archive size changed since it was opened.");
+            if (doc.IndexedRpf9Source is { } indexed)
+            {
+                indexed.CheckHeader(file, doc.FileSize);
+                if (entry.RequiresIndexDecoder)
+                {
+                    file.Dispose();
+                    return new(indexed.Provider.DecodePayload(doc, indexed, entry, Math.Min(entry.Size, previewLimit), token));
+                }
+                CheckIndexedPrefix(file, entry);
+            }
             if (entry.Segments is { Count: > 0 } segments)
             {
                 foreach (var segment in segments)
-                    if (segment.Offset < 0 || segment.StoredSize < 6 || segment.Offset > file.Length || segment.StoredSize > file.Length - segment.Offset)
+                    if (segment.Offset < 0 || segment.StoredSize < (segment.IsRaw ? 1 : 6) || segment.Offset > file.Length || segment.StoredSize > file.Length - segment.Offset)
                         throw new InvalidDataException("Recovered block is outside the archive.");
                 return new(new ZlibSegmentsStream(segments, segment =>
                 {
@@ -541,7 +630,7 @@ public static class ArchiveReader
                 }, file));
             }
             file.Position = entry.Offset;
-            Stream bounded = new BoundedReadStream(file, entry.StoredSize);
+            Stream bounded = new BoundedReadStream(file, doc.HasDecodedRpf9Index ? entry.Size : entry.StoredSize);
             return new(entry.Compression is "Deflate" or "Recovered raw deflate shader" ? new DeflateStream(bounded, CompressionMode.Decompress)
                 : entry.Compression == "Recovered zlib" ? new ZLibStream(bounded, CompressionMode.Decompress) : bounded);
         }

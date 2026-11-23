@@ -40,4 +40,4 @@ The index stores 32-bit and 64-bit hashes of relative paths. Lookup treats recog
 
 Searching executable strings and decoded metadata produced candidates for 5,608 of the 6,534 standalone slots. Of those, 1,378 match both hashes and the entry type, including all 797 indexed movies. Another 4,230 child archive candidates match their available 64-bit hash and entry type. Some script matches identify a name stem and extension family. Original casing and unmatched paths remain unresolved.
 
-The desktop app still discovers supported payloads by scanning archives. The research reader is separate. Full filename recovery, broader nested payload validation, and archive rebuilding remain open.
+The desktop app can use a compatible [local decoder](rpf9-index-provider.md) to browse these indexes and view supported payloads. Full filename recovery, broader nested payload validation, and archive rebuilding remain open.

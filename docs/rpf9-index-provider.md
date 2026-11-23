@@ -1,0 +1,36 @@
+# Local RPF9 index decoder
+
+Use **File > Configure local RPF9 decoder** to select a configuration for a compatible local decoder you trust. Reopen the archive or folder. The app shows the decoded index and the header signature result in its inspection details.
+
+Double-click a nested archive row to browse it. Use **Up** at the child archive's root to return to its parent. Saving a workspace also saves the active child location. Name candidates are labelled in the row tooltip. Search for a path or use `hash:` with a 32-bit or 64-bit name hash.
+
+Supported entries use the app's existing preview and extraction controls. Movie and AWC entries open the existing players when the required tools are installed. Recognized resource layouts open in the model or texture viewer. Other readable resources can be inspected as bytes and extracted as decoded sections. Staged replacements remain in the workspace.
+
+## Configuration
+
+The desktop app runs the Python interpreter and bridge script selected in the configuration. Use local absolute paths and only configure a script you trust. The bridge script, its dependencies, the game executable, and any optional name dictionary must already be on your machine.
+
+```json
+{
+  "version": 1,
+  "python": "C:/local-decoder/python.exe",
+  "script": "C:/local-decoder/rpf9_desktop_bridge.py",
+  "executable": "C:/local-decoder/game_scarlett_master.exe",
+  "names": "C:/local-decoder/name-matches.json"
+}
+```
+
+The optional `names` field can be omitted. The configured script reads the executable as data and uses its own compatible format decoder. The app does not launch the game. The public source and app package contain the integration and recovery scanners.
+
+Choose **File > Use recovery scans for new opens** to turn off the local decoder. **Scan entire archive** switches the selected source to the built-in recovery view.
+
+## Bridge contract
+
+The app invokes the script with `--executable PATH --archive PATH`, followed by an optional `--inside SLOT` for each child in the current path. It then sends one of two commands.
+
+| Command | stdout |
+| --- | --- |
+| `index [--names PATH]` | Version 1 catalog JSON in UTF-8 |
+| `read --slot SLOT --length BYTES --header SHA256` | The requested prefix of one decoded transformed member as binary bytes |
+
+Catalogs include the original file size, the absolute archive base, the archive extent, the signed header size, the SHA-256 digest of the stored header bytes, the signature verification result, and the numbered rows. Chunk rows can provide absolute, bounded zlib or raw segments with their stored and decoded sizes. Transformed rows delegate byte reads to the bridge. The app validates the catalog's ranges and compares its stored header digest against the opened file.

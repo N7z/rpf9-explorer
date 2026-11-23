@@ -43,7 +43,7 @@ public partial class MainWindow
         else await OpenSavedWorkspaceAsync(dialog.FileName);
     }
 
-    private async Task<bool> OpenSourcesAsync(IEnumerable<string> paths, bool append, string? directory = null)
+    private async Task<bool> OpenSourcesAsync(IEnumerable<string> paths, bool append, string? directory = null, bool forceRecovery = false)
     {
         if (_busy) return false;
         string[] requested = paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).Take(513).ToArray();
@@ -63,8 +63,8 @@ public partial class MainWindow
                 WorkProgress.Value = .8 * i / requested.Length;
                 try
                 {
-                    var opened = await Task.Run(() => ArchiveReader.Open(source), token);
-                    if (opened.Format == "RPF9" && opened.HeaderBytes.AsSpan(0, 4).SequenceEqual("9FPR"u8))
+                    var opened = await Task.Run(() => ArchiveReader.Open(source, forceRecovery ? null : _indexProvider, token), token);
+                    if (opened.Format == "RPF9" && !opened.HasDecodedRpf9Index && opened.HeaderBytes.AsSpan(0, 4).SequenceEqual("9FPR"u8))
                     {
                         int sourceIndex = i;
                         var discovery = new Progress<PayloadIndexProgress>(p =>
@@ -83,7 +83,7 @@ public partial class MainWindow
                     }
                     loaded[source] = opened;
                 }
-                catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or ArgumentException or OverflowException)
+                catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or ArgumentException or OverflowException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
                 { errors.Add(Path.GetFileName(source) + ": " + ex.Message); }
             }
             if (loaded.Count == 0) throw new InvalidDataException(string.Join(Environment.NewLine, errors.Take(5)));
@@ -134,13 +134,15 @@ public partial class MainWindow
     private void UpdateWorkspaceHeader()
     {
         if (_documents.Count == 0) return;
-        ArchiveNameText.Text = _scopeSource == null ? $"Workspace · {_documents.Count:N0} sources" : Path.GetFileName(_scopeSource.SourcePath);
+        ArchiveNameText.Text = _scopeSource == null ? $"Workspace · {_documents.Count:N0} sources" : _scopeSource.ArchiveLocation;
         ArchivePathText.Text = _scopeSource?.SourcePath ?? _workspaceDirectory ?? "Multiple source archives";
         ArchiveStatsText.Text = $"{_allRows.Length:N0} indexed assets"; FormatText.Text = _documents.Count > 1 ? "Workspace" : _document?.Format;
         FormatBadge.Visibility = Visibility.Visible;
-        bool recovery = _documents.Values.Any(d => d.Format == "RPF9");
-        NoticeBorder.Visibility = recovery ? Visibility.Visible : Visibility.Collapsed;
-        NoticeText.Text = recovery ? "RPF9 payload recovery · original directories and archive rebuilding remain unavailable · edits save in separate projects" : "";
+        bool recovery = _documents.Values.Any(d => d.Format == "RPF9" && !d.HasDecodedRpf9Index);
+        bool indexed = _scopeSource?.HasDecodedRpf9Index == true || _scopeSource == null && _documents.Values.Any(d => d.HasDecodedRpf9Index);
+        NoticeBorder.Visibility = indexed || recovery ? Visibility.Visible : Visibility.Collapsed;
+        NoticeText.Text = indexed ? "Decoded RPF9 index · double-click a child archive to browse it · edits save in separate projects"
+            : recovery ? "RPF9 payload recovery · edits save in separate projects" : "";
         Title = (_sessionProject == null ? "rpf9-explorer 1.3" : Path.GetFileName(_sessionProject.ProjectPath) + " · rpf9-explorer 1.3");
     }
 
@@ -152,7 +154,7 @@ public partial class MainWindow
         foreach (var source in _documents.Values.OrderBy(d => d.SourcePath, StringComparer.OrdinalIgnoreCase))
         {
             string label = _workspaceDirectory != null ? Path.GetRelativePath(_workspaceDirectory, source.SourcePath) : Path.GetFileName(source.SourcePath);
-            var node = new TreeViewItem { Header = label, ToolTip = source.SourcePath, Tag = new Navigation(source) };
+            var node = new TreeViewItem { Header = source.ParentArchive == null ? label : source.ArchiveLocation, ToolTip = source.SourcePath, Tag = new Navigation(source) };
             node.Items.Add("Loading…"); node.Expanded += ExpandWorkspaceNode; root.Items.Add(node);
         }
     }
@@ -205,16 +207,27 @@ public partial class MainWindow
             if (FilesGrid.SelectedItem is FileRow selected && ThumbnailsCheckBox.IsChecked == true) { _galleryPage = Array.IndexOf(_galleryRows, selected) / ImagesPerPage; ConfigureGallery(_rows.ToArray(), false); ImageGallery.SelectedItem = selected; ImageGallery.ScrollIntoView(selected); }
         }
     }
-    private void UpFolder_Click(object sender, RoutedEventArgs e)
+    private async void UpFolder_Click(object sender, RoutedEventArgs e)
     {
         if (_scopeContainer != null) _scopeContainer = null;
         else if (_selectedFolder != null) { int slash = _selectedFolder.LastIndexOf('/'); _selectedFolder = slash < 0 ? null : _selectedFolder[..slash]; }
+        else if (_scopeSource is { ParentArchive: not null } current)
+        {
+            await ChangeIndexedArchiveAsync(current, [], true);
+            return;
+        }
         else _scopeSource = null;
         RefreshFiles(); UpdateWorkspaceHeader();
     }
-    private void FilesGrid_DoubleClick(object sender, MouseButtonEventArgs e)
+    private async void FilesGrid_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (FilesGrid.SelectedItem is FileRow { Asset: { } asset } && _assetIndex?.HasChildren(asset) == true)
+        if (FilesGrid.SelectedItem is not FileRow { Asset: { } asset }) return;
+        if (asset.Entry.IsNestedArchive)
+        {
+            e.Handled = true;
+            await ChangeIndexedArchiveAsync(asset.Document, [asset.Entry.Index]);
+        }
+        else if (_assetIndex?.HasChildren(asset) == true)
             NavigateWorkspace(new Navigation(asset.Document, asset.Entry.Folder, asset.Entry));
     }
     private string SelectedAssetType => (AssetTypeFilter.SelectedItem as ComboBoxItem)?.Tag as string ?? "all";
@@ -234,8 +247,13 @@ public partial class MainWindow
     private WorkspaceViewState CurrentWorkspaceView()
     {
         var asset = (FilesGrid.SelectedItem as FileRow)?.Asset;
+        var indexed = _scopeSource ?? asset?.Document;
         return new(SearchBox.Text, SelectedAssetType, ThumbnailsCheckBox.IsChecked == true, AvailableOnlyCheckBox.IsChecked == true,
-            _scopeSource?.SourcePath, _selectedFolder, _scopeContainer?.Path, asset?.SourcePath, asset?.Entry.Path, asset?.Texture?.Index ?? -1, SearchAllSourcesCheckBox.IsChecked == true);
+            _scopeSource?.SourcePath, _selectedFolder, _scopeContainer?.Path, asset?.SourcePath, asset?.Entry.Path, asset?.Texture?.Index ?? -1, SearchAllSourcesCheckBox.IsChecked == true)
+        {
+            NestedSource = indexed?.ParentArchive == null ? null : indexed.SourcePath,
+            NestedSlots = indexed?.ParentArchive == null ? null : indexed.NestedArchiveSlots.ToArray()
+        };
     }
     private bool CreateSavedWorkspace()
     {
@@ -272,7 +290,10 @@ public partial class MainWindow
             _sessionProject = project;
             foreach (string source in project.SourcePaths) if (project.ForSource(source, false) is { } edits) _sourceProjects[source] = edits;
             if (_document != null) SetActiveDocument(_document);
-            var view = project.View; _loading = true;
+            var view = project.View;
+            bool restoredChild = view.NestedSlots is not { Length: > 0 } || view.NestedSource != null
+                && _documents.TryGetValue(view.NestedSource, out var root) && await ChangeIndexedArchiveAsync(root, view.NestedSlots);
+            _loading = true;
             SearchBox.Text = view.Search; AssetTypeFilter.SelectedItem = AssetTypeFilter.Items.OfType<ComboBoxItem>().FirstOrDefault(i => Equals(i.Tag, view.Type)) ?? AssetTypeFilter.Items[0];
             ThumbnailsCheckBox.IsChecked = view.Thumbnails; AvailableOnlyCheckBox.IsChecked = view.AvailableOnly; SearchAllSourcesCheckBox.IsChecked = view.SearchAllSources;
             _scopeSource = view.ScopeSource != null && _documents.TryGetValue(view.ScopeSource, out var scope) ? scope : null;
@@ -280,7 +301,9 @@ public partial class MainWindow
             _loading = false; RefreshReplacementAnnotations(); RefreshFiles(); UpdateWorkspaceHeader();
             var selected = _rows.FirstOrDefault(r => r.Asset?.SourcePath == view.SelectedSource && r.Entry.Path == view.SelectedEntry && (r.Asset?.Texture?.Index ?? -1) == view.SelectedTexture);
             if (selected != null) { FilesGrid.SelectedItem = selected; FilesGrid.ScrollIntoView(selected); if (view.Thumbnails) { _galleryPage = Array.IndexOf(_galleryRows, selected) / ImagesPerPage; ConfigureGallery(_rows.ToArray(), false); ImageGallery.SelectedItem = selected; ImageGallery.ScrollIntoView(selected); } }
-            StatusText.Text = "Workspace reopened · sources, search and staged edits restored"; return true;
+            StatusText.Text = restoredChild ? "Workspace reopened · sources, search and staged edits restored"
+                : "Workspace reopened at the source root. The saved nested index is unavailable.";
+            return true;
         }
         catch (Exception ex) { _loading = false; StatusText.Text = "Could not open workspace: " + ex.Message; return false; }
     }

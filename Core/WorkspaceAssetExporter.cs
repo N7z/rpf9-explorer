@@ -28,12 +28,20 @@ public static class WorkspaceAssetExporter
                     {
                         resource ??= ArchiveReader.ReadResourceData(asset.Document, asset.Entry, token);
                         split = asset.Entry.ResourceSystemBytes ?? checked((int)asset.Entry.Segments![0].Size);
-                        var model = RageModelDecoder.Decode(resource.AsSpan(0, split), resource.AsSpan(split), asset.Entry.ResourceDrawableOffset)
-                            ?? throw new InvalidDataException("The selected model no longer matches its validated source.");
-                        byte[] obj = Encoding.UTF8.GetBytes(RageModelDecoder.CreateObj(model));
-                        string output = ArchiveReader.SafeDestination(sourceFolder, Path.ChangeExtension(asset.Entry.Path, ".obj"));
-                        await WriteExportAsync(output, obj, token);
-                        bytesCopied += obj.Length;
+                        var model = RageModelDecoder.Decode(resource.AsSpan(0, split), resource.AsSpan(split), asset.Entry.ResourceDrawableOffset);
+                        if (model == null && asset.Document.HasDecodedRpf9Index)
+                        {
+                            await asset.Document.ExtractAsync([asset.Entry], sourceFolder, cancellationToken: token);
+                            bytesCopied += asset.Size;
+                        }
+                        else
+                        {
+                            if (model == null) throw new InvalidDataException("The selected model no longer matches its validated source.");
+                            byte[] obj = Encoding.UTF8.GetBytes(RageModelDecoder.CreateObj(model));
+                            string output = ArchiveReader.SafeDestination(sourceFolder, Path.ChangeExtension(asset.Entry.Path, ".obj"));
+                            await WriteExportAsync(output, obj, token);
+                            bytesCopied += obj.Length;
+                        }
                     }
                     else if (asset.Texture == null)
                     {

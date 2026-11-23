@@ -6,7 +6,11 @@ namespace RpfPreview.Core;
 
 public sealed record WorkspaceViewState(string Search = "", string Type = "all", bool Thumbnails = false,
     bool AvailableOnly = false, string? ScopeSource = null, string? Folder = null, string? Container = null,
-    string? SelectedSource = null, string? SelectedEntry = null, int SelectedTexture = -1, bool SearchAllSources = true);
+    string? SelectedSource = null, string? SelectedEntry = null, int SelectedTexture = -1, bool SearchAllSources = true)
+{
+    public string? NestedSource { get; init; }
+    public int[]? NestedSlots { get; init; }
+}
 
 
 public sealed class AssetWorkspaceProject
@@ -56,6 +60,10 @@ public sealed class AssetWorkspaceProject
                 throw new InvalidDataException("Unsafe source-project reference.");
         }
         if (!Directory.Exists(path + ".assets")) throw new InvalidDataException("The workspace assets folder is missing.");
+        if (manifest.View.NestedSlots is { } slots
+            && (slots.Length is < 1 or > 16 || slots.Any(slot => slot < 0) || manifest.View.NestedSource == null
+                || !paths.Contains(manifest.View.NestedSource)))
+            throw new InvalidDataException("Saved nested archive location is invalid.");
         var project = new AssetWorkspaceProject(path, manifest.Sources.ToList(), manifest.View, Hash(bytes));
         foreach (var source in project._sources.Where(s => s.ProjectFile != null)) _ = project.ForSource(source.Path, false);
         return project;

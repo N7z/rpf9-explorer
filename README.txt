@@ -7,13 +7,14 @@ Take-Two Interactive. The source contains no actual GTA 6 game code. Game source
 code, decompiled game code, executables and scripts are not included in the
 source package. Screenshots show files loaded locally.
 
-Full original RPF9 directory decoding is still unresolved. This application
-browses supported archives and validates specific recoverable payload types.
-Generated RPF9 entries must not be mistaken for the original member directory.
+With a compatible local decoder, this application browses the RPF9 member table,
+opens nested archives and previews or extracts supported members. Unmatched
+names are identified by slot and hash. The built-in recovery scanner is also
+available. Archive rebuilding remains unavailable.
 
 USING THE APP
 
-Model discovery now scans the whole RPF9 source on first open and refreshes older
+In recovery mode, model discovery scans the whole RPF9 source on first open and refreshes older
 model indexes automatically. Character parts inside drawable dictionaries are
 listed and searchable by native component name. Discovery shows progress and can
 be canceled; completed model indexes are reused on later opens.

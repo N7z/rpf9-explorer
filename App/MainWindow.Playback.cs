@@ -23,12 +23,13 @@ public partial class MainWindow
         var info = ArchiveReader.GetVideoInfo(document, entry)
             ?? throw new InvalidDataException("The video's frame index or bounds could not be validated.");
         token.ThrowIfCancellationRequested();
-        TextPreview.Text = $"Bink video\n\nDimensions: {info.Width:N0} × {info.Height:N0}\nFrame rate: {info.FramesPerSecond:0.###} fps\nDuration: {info.DurationSeconds:0.###} seconds\nFrames: {info.Frames:N0}\nAudio tracks: {info.AudioTracks:N0}\n\nSource offset: 0x{entry.Offset:X}\nStored size: {FormatSize(entry.StoredSize)}\n\nRecovered stream. The original filename and folder are unknown.";
+        TextPreview.Text = $"Bink video\n\nDimensions: {info.Width:N0} × {info.Height:N0}\nFrame rate: {info.FramesPerSecond:0.###} fps\nDuration: {info.DurationSeconds:0.###} seconds\nFrames: {info.Frames:N0}\nAudio tracks: {info.AudioTracks:N0}\n\nSource offset: 0x{entry.Offset:X}\nMovie size: {FormatSize(entry.Size)}\n\n"
+            + (document.HasDecodedRpf9Index ? $"Indexed member · {entry.Path}" : "Recovered stream. The original filename and folder are unknown.");
         PreviewMetaText.Text = $"{info.Width:N0} × {info.Height:N0}  ·  {info.FramesPerSecond:0.###} fps  ·  {Clock(info.DurationSeconds)}  ·  {info.AudioTracks} audio track(s)";
         HexPreview.Text = FormatHex(document.ReadPreview(entry, 4096, token));
         PreviewFootnoteText.Text = "Opening movie…";
         BinkPlaybackSession? session = null;
-        session = new BinkPlaybackSession(document.SourcePath, entry.Offset, entry.StoredSize, token,
+        session = new BinkPlaybackSession(document.SourcePath, entry.Offset, entry.Size, token,
             async (pixels, frame, playing) => await Dispatcher.InvokeAsync(() => {
                 if (token.IsCancellationRequested || _player != session) return;
                 var header = session!.Header;

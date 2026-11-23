@@ -30,7 +30,7 @@ public partial class MainWindow
         finally { _workCancellation?.Dispose(); _workCancellation = null; _scanning = false; SetBusy(false); }
         if (result != null)
         {
-            await OpenSourcesAsync(new[] { document.SourcePath }, true);
+            await OpenSourcesAsync(new[] { document.SourcePath }, true, forceRecovery: true);
             FilesGrid.SelectedItem = _rows.FirstOrDefault(r => r.Asset?.SourcePath == document.SourcePath && r.Entry.Path == selected);
             StatusText.Text = $"Full source scan completed · {result.Models:N0} models · {result.TextureDictionaries:N0} texture dictionaries · {result.AudioBanks:N0} audio banks · {result.Shaders:N0} shaders · {result.PsinContainers:N0} PSIN containers · {result.ClipDictionaries:N0} clip dictionaries. Original RPF9 directory remains undecoded.";
         }

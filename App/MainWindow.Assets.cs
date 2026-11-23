@@ -64,7 +64,7 @@ public partial class MainWindow
         _textureDictionary = RageTextureDecoder.Inspect(_textureSystem, _textureGraphics)
             ?? throw new InvalidDataException("This resource does not match the supported texture dictionary layout.");
         TextTab.Header = "Details";
-        TextPreview.Text = $"Recovered texture dictionary\n\n{_textureDictionary.Textures.Count:N0} textures\nSystem section: {FormatSize(split)}\nGraphics section: {FormatSize(bytes.Length - split)}\n\nThe texture names are embedded in the resource. The original archive member name is unknown.\n\nExport DDS creates a standard, detiled texture with its mipmaps. Extract selected saves the decoded system and graphics sections as an application-specific .r9texdata recovery file; no native RSC9 header is invented.";
+        TextPreview.Text = $"Texture dictionary\n\n{_textureDictionary.Textures.Count:N0} textures\nSystem section: {FormatSize(split)}\nGraphics section: {FormatSize(bytes.Length - split)}\n\nThe texture names come from the resource. Export DDS saves the pixels and supported mipmaps. Extract selected saves the decoded system and graphics sections.";
         HexPreview.Text = FormatHex(bytes.AsSpan(0, Math.Min(bytes.Length, 4096)));
         ImageTab.Header = "Texture"; ImageTab.IsEnabled = true;
         AssetExportButton.Content = "Export DDS…"; AssetExportButton.IsEnabled = true; AssetExportButton.ToolTip = "Export all source mip levels and array/volume slices";
@@ -199,7 +199,7 @@ public partial class MainWindow
 
     private async Task PreviewAudioAsync(ArchiveDocument document, ArchiveEntry entry, CancellationToken token)
     {
-        var info = await Task.Run(() => AwcInfo.Inspect(document.SourcePath, entry.Offset, entry.StoredSize), token)
+        var info = await Task.Run(() => AwcInfo.Inspect(document.SourcePath, entry.Offset, entry.Size), token)
             ?? throw new InvalidDataException("The recovered AWC container could not be validated.");
         token.ThrowIfCancellationRequested();
         _audioInfo = info; _audioDocument = document; _audioEntry = entry;
@@ -247,11 +247,11 @@ public partial class MainWindow
             if (stream.Codec == 5)
             {
                 xma = output + ".xma.wav";
-                await Task.Run(() => AwcRecovery.WriteXmaWave(source, entry.Offset, entry.StoredSize, index, xma), token);
+                await Task.Run(() => AwcRecovery.WriteXmaWave(source, entry.Offset, entry.Size, index, xma), token);
                 token.ThrowIfCancellationRequested();
                 foreach (var argument in new[] { "-v", "error", "-xerror", "-nostdin", "-protocol_whitelist", "file,pipe", "-i", xma, "-t", "120", "-map_metadata", "-1", "-bitexact", "-c:a", "pcm_s16le", "-f", "wav", output }) start.ArgumentList.Add(argument);
             }
-            else foreach (var argument in new[] { source, "0x" + entry.Offset.ToString("X"), "0x" + entry.StoredSize.ToString("X"), index.ToString(), output, "120" }) start.ArgumentList.Add(argument);
+            else foreach (var argument in new[] { source, "0x" + entry.Offset.ToString("X"), "0x" + entry.Size.ToString("X"), index.ToString(), output, "120" }) start.ArgumentList.Add(argument);
             using var process = new Process { StartInfo = start };
             if (!process.Start()) throw new IOException("The audio decoder could not start.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(30));
