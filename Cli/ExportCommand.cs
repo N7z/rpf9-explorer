@@ -17,7 +17,8 @@ public static class ExportCommand
           -q, --query <text>       Search text, same syntax as the app
           -t, --type <type>        Asset type to export (default: models)
               --id <id>            Only the asset with this id (from 'search'); repeat or separate with commas
-              --kit <id>           Export the models of an authored wardrobe kit (from 'kits') with its appearance
+              --kit <id>           Export the models of an authored wardrobe kit (from 'kits') with its appearance;
+                                   --query filters the kit's models and --id adds other models
               --available          Skip assets the current decoders cannot extract
               --best               Keep only the largest variant of each name
               --merge <name>       Write all models into one <name>.obj, keeping each part as its own object
@@ -71,7 +72,8 @@ public static class ExportCommand
         var appearances = new Dictionary<WorkspaceAsset, WardrobeAppearance>(ReferenceEqualityComparer.Instance);
         var failures = new List<Failure>();
         IReadOnlyList<WorkspaceAsset> assets = kit is uint kitId
-            ? KitAssets(kitId, wardrobe!, workspace.Index, selection, appearances, failures)
+            ? [.. KitAssets(kitId, wardrobe!, workspace.Index, selection, appearances, failures),
+                .. selection.Ids.Count > 0 ? (selection with { Query = "" }).Apply(workspace.Index) : []]
             : selection.Apply(workspace.Index);
         if (assets.Count == 0)
         {
