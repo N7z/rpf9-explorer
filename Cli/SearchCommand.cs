@@ -37,8 +37,8 @@ public static class SearchCommand
         var selection = AssetSelection.From(line, "all");
         int limit = line.Integer("limit", 200, 0, int.MaxValue);
         var workspace = SourceWorkspace.Open(line.Positionals, line.Value("decoder"), reporter, token);
-        var matches = selection.Apply(workspace.Index);
-        var rows = (limit == 0 ? matches : matches.Take(limit)).Select(ToRow).ToArray();
+        var matches = selection.Apply(workspace);
+        var rows = (limit == 0 ? matches : matches.Take(limit)).Select(a => ToRow(a, workspace.Ids)).ToArray();
         if (line.Has("json"))
             Console.WriteLine(JsonSerializer.Serialize(rows, CliJson.Options));
         else
@@ -49,8 +49,8 @@ public static class SearchCommand
         return matches.Count == 0 ? ExitCodes.NoMatches : ExitCodes.Success;
     }
 
-    private static Row ToRow(WorkspaceAsset asset) => new(
-        AssetLabels.Id(asset), asset.Kind, AssetLabels.Name(asset), asset.SourceName, asset.Size,
+    private static Row ToRow(WorkspaceAsset asset, AssetIds ids) => new(
+        ids[asset], asset.Kind, AssetLabels.Name(asset), asset.SourceName, asset.Size,
         asset.Entry.Offset.ToString("X10"), asset.Available);
 
     private static void PrintTable(IReadOnlyList<Row> rows)

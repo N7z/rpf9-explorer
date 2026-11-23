@@ -142,18 +142,18 @@ Extraction exports the original assets. Staged replacements are stored separatel
 ```powershell
 rpf9-cli search D:\Game\packs.rpf -q vicki
 rpf9-cli export D:\Game -q "cs_vicki_" --best --merge vicki -o D:\Exports\vicki
-rpf9-cli export D:\Game --id 0065B40010:440,0080C04010:700 -o D:\Exports\parts
+rpf9-cli export D:\Game --id 75B33ED2:0065B40010:440,75B33ED2:0080C04010:700 -o D:\Exports\parts
 rpf9-cli export D:\Game\textures.rpf -t textures -q blip_ -o D:\Exports\blips
 rpf9-cli kits D:\Game -q tanktop --complete
 rpf9-cli export D:\Game --kit BC6060BB --merge outfit -o D:\Exports\outfit
 rpf9-cli scan D:\Game --kinds textures,psin
 ```
 
-- `search` prints an ID, type, size, source and name for each match. Add `--json` for machine-readable output.
+- `search` prints an ID, type, size, source and name for each match. Add `--json` for machine-readable output. An ID names one source, entry and subresource: a source tag, then the offset (and drawable child or texture index), or the entry index where offsets repeat.
 - `export` writes models as OBJ + MTL with PNG color and normal maps, textures as PNG, and other assets as stored files. `--merge` writes every model into one OBJ with each part as its own object. Parts keep their native bind-space coordinates, so character components line up when merged.
 - `kits` lists authored wardrobe kits and the indexed models each one selects. `export --kit <id>` exports a kit with its authored albedo and normal maps, or its SLOD color where no albedo texture is available.
 - `scan` runs the full payload scan on every RPF9 source and saves it to the shared index cache. Kinds that already have a full scan are skipped, `--kinds` limits the scan, and a failing kind does not stop the others.
-- `--query` uses the app's search syntax. `--id` selects exact rows from `search`. `--best` keeps the largest variant of each name. `--lod` picks a detail level and `--max-texture` limits texture size.
+- `--query` uses the app's search syntax. `--id` selects exact rows from `search`; an unknown ID stops the export before anything is written. `--best` keeps the largest variant of each name. `--lod` picks a detail level and `--max-texture` limits texture size.
 - Each export folder gets a `manifest.json` that lists every part, the texture source used for each material, and the reason any material or asset could not be exported.
 - Existing exports are not overwritten unless you add `--overwrite`.
 

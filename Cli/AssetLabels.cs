@@ -5,15 +5,6 @@ namespace RpfPreview.Cli;
 
 public static class AssetLabels
 {
-    public static string Id(WorkspaceAsset asset)
-    {
-        string offset = asset.Entry.Offset.ToString("X10", CultureInfo.InvariantCulture);
-        if (asset.Texture is not null) return $"{offset}:t{asset.Texture.Index}";
-        if (asset.PoolTexture is not null) return $"{offset}:p{asset.PoolTexture.Index}";
-        if (asset.Entry.ResourceDrawableOffset is int drawable) return $"{offset}:{drawable:X}";
-        return offset;
-    }
-
     public static string Name(WorkspaceAsset asset)
     {
         var entry = asset.Entry;

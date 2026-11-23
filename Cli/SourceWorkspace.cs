@@ -11,10 +11,12 @@ public sealed class SourceWorkspace
     {
         Documents = documents;
         Index = index;
+        Ids = AssetIds.Build(index);
     }
 
     public IReadOnlyList<ArchiveDocument> Documents { get; }
     public AssetWorkspaceIndex Index { get; }
+    public AssetIds Ids { get; }
 
     public static string DefaultDecoderConfiguration => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rpf9-explorer", "rpf9-decoder.json");
@@ -46,9 +48,9 @@ public sealed class SourceWorkspace
         var paths = new List<string>();
         foreach (string input in inputs)
         {
-            string full = Path.GetFullPath(input);
+            string full = RequireLocal(input);
             if (Directory.Exists(full))
-                paths.AddRange(Directory.EnumerateFiles(LocalPath.Require(full), "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = LocalPath.RemoteAttributes })
+                paths.AddRange(Directory.EnumerateFiles(full, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = LocalPath.RemoteAttributes })
                     .Where(p => SupportedExtensions.Contains(Path.GetExtension(p).ToLowerInvariant()))
                     .Order(StringComparer.OrdinalIgnoreCase));
             else if (File.Exists(full)) paths.Add(full);
@@ -60,10 +62,24 @@ public sealed class SourceWorkspace
         return distinct;
     }
 
+    public static string RequireLocal(string path)
+    {
+        try { return LocalPath.Require(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { throw new UsageException($"{path}: {ex.Message}"); }
+    }
+
     private static Rpf9IndexProvider? LoadDecoder(string? configuration, Reporter reporter)
     {
         bool explicitPath = configuration is not null;
-        string path = configuration ?? DefaultDecoderConfiguration;
+        string path;
+        try { path = LocalPath.Require(configuration ?? DefaultDecoderConfiguration); }
+        catch (IOException ex) when (!explicitPath)
+        {
+            reporter.Warn("Local RPF9 decoder unavailable, using recovery scans: " + ex.Message);
+            return null;
+        }
+        catch (IOException ex) { throw new UsageException("Local RPF9 decoder unavailable: " + ex.Message); }
         if (!File.Exists(path))
         {
             if (explicitPath) throw new UsageException($"Decoder configuration not found: {path}");

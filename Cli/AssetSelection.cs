@@ -20,14 +20,13 @@ public sealed record AssetSelection(string Query, string Type, IReadOnlyList<str
         line.Has("available"),
         line.Has("best"));
 
-    public IReadOnlyList<WorkspaceAsset> Apply(AssetWorkspaceIndex index)
+    public IReadOnlyList<WorkspaceAsset> Apply(SourceWorkspace workspace)
     {
         var query = AssetSearchQuery.Parse(Query);
-        var ids = Ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        IEnumerable<WorkspaceAsset> matches = index.Assets.Where(a =>
+        var candidates = Ids.Count > 0 ? workspace.Ids.Resolve(Ids) : workspace.Index.Assets;
+        IEnumerable<WorkspaceAsset> matches = candidates.Where(a =>
             AssetSearchQuery.TypeMatches(a.Kind, Type)
             && (!AvailableOnly || a.Available)
-            && (ids.Count == 0 || ids.Contains(AssetLabels.Id(a)))
             && query.Matches(a));
         if (BestVariant)
             matches = matches.GroupBy(a => a.Kind + "/" + AssetLabels.Name(a), StringComparer.OrdinalIgnoreCase)

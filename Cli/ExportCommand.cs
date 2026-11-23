@@ -72,9 +72,9 @@ public static class ExportCommand
         var appearances = new Dictionary<WorkspaceAsset, WardrobeAppearance>(ReferenceEqualityComparer.Instance);
         var failures = new List<Failure>();
         IReadOnlyList<WorkspaceAsset> assets = kit is uint kitId
-            ? [.. KitAssets(kitId, wardrobe!, workspace.Index, selection, appearances, failures),
-                .. selection.Ids.Count > 0 ? (selection with { Query = "" }).Apply(workspace.Index) : []]
-            : selection.Apply(workspace.Index);
+            ? [.. KitAssets(kitId, wardrobe!, workspace, selection, appearances, failures),
+                .. selection.Ids.Count > 0 ? (selection with { Query = "" }).Apply(workspace) : []]
+            : selection.Apply(workspace);
         if (assets.Count == 0)
         {
             reporter.Info("No assets match.");
@@ -102,13 +102,13 @@ public static class ExportCommand
         return parts.Count + imageFiles.Count + extracted == 0 ? ExitCodes.Failure : ExitCodes.Success;
     }
 
-    private static IReadOnlyList<WorkspaceAsset> KitAssets(uint kitId, WardrobeIndex wardrobe, AssetWorkspaceIndex index, AssetSelection selection,
+    private static IReadOnlyList<WorkspaceAsset> KitAssets(uint kitId, WardrobeIndex wardrobe, SourceWorkspace workspace, AssetSelection selection,
         Dictionary<WorkspaceAsset, WardrobeAppearance> appearances, List<Failure> failures)
     {
         var resolution = wardrobe.ResolveKit(kitId) ?? throw new UsageException($"Wardrobe kit {kitId:X8} is not in the loaded catalogues.");
         foreach (var warning in resolution.Warnings) failures.Add(new(kitId.ToString("X8"), "kit", warning));
         var query = AssetSearchQuery.Parse(selection.Query);
-        var byDrawable = index.Assets.Where(a => a.Kind == "model" && a.Available)
+        var byDrawable = workspace.Index.Assets.Where(a => a.Kind == "model" && a.Available)
             .Select(a => (Asset: a, Key: WardrobeIndex.DrawableKey(a.Entry))).Where(p => p.Key is not null)
             .GroupBy(p => p.Key!.Value).ToDictionary(g => g.Key, g => g.Select(p => p.Asset).ToArray());
         var result = new List<WorkspaceAsset>();
@@ -124,7 +124,7 @@ public static class ExportCommand
             if (best is null) continue;
             result.Add(best);
             if (states.Length == 1) appearances[best] = states[0];
-            else failures.Add(new(AssetLabels.Id(best), AssetLabels.Name(best), "The kit selects conflicting appearance states; authored albedo was not applied."));
+            else failures.Add(new(workspace.Ids[best], AssetLabels.Name(best), "The kit selects conflicting appearance states; authored albedo was not applied."));
         }
         return result;
     }
@@ -135,7 +135,7 @@ public static class ExportCommand
         string? merge = line.Value("merge");
         if (merge is not null && (merge.Length == 0 || merge.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
             throw new UsageException("--merge needs a plain file name without folders.");
-        return new(Path.GetFullPath(output), merge is null ? null : Path.GetFileNameWithoutExtension(merge),
+        return new(SourceWorkspace.RequireLocal(output), merge is null ? null : Path.GetFileNameWithoutExtension(merge),
             line.Integer("lod", 0, 0, RageModelDecoder.LodCount - 1),
             line.Integer("max-texture", 2048, 16, 16384),
             !line.Has("no-textures"), !line.Has("no-normals"), !line.Has("no-wardrobe"), line.Has("overwrite"));
@@ -143,6 +143,7 @@ public static class ExportCommand
 
     private sealed class Exporter
     {
+        private readonly AssetIds _ids;
         private readonly WardrobeIndex? _wardrobe;
         private readonly IReadOnlyDictionary<WorkspaceAsset, WardrobeAppearance> _appearances;
         private readonly Settings _settings;
@@ -155,6 +156,7 @@ public static class ExportCommand
         public Exporter(SourceWorkspace workspace, WardrobeIndex? wardrobe, IReadOnlyDictionary<WorkspaceAsset, WardrobeAppearance> appearances,
             Settings settings, Reporter reporter, CancellationToken token)
         {
+            _ids = workspace.Ids;
             _wardrobe = wardrobe;
             _appearances = appearances;
             _settings = settings;
@@ -173,7 +175,7 @@ public static class ExportCommand
             {
                 _token.ThrowIfCancellationRequested();
                 var asset = assets[i];
-                string name = AssetLabels.Name(asset), id = AssetLabels.Id(asset);
+                string name = AssetLabels.Name(asset), id = _ids[asset];
                 _reporter.Progress($"Model {i + 1}/{assets.Count}: {name}");
                 if (!asset.Available) { Failures.Add(new(id, name, asset.Entry.Limitation ?? "Not extractable with the current decoders.")); continue; }
                 try
@@ -207,7 +209,7 @@ public static class ExportCommand
             {
                 _token.ThrowIfCancellationRequested();
                 var asset = assets[i];
-                string name = AssetLabels.Name(asset), id = AssetLabels.Id(asset);
+                string name = AssetLabels.Name(asset), id = _ids[asset];
                 _reporter.Progress($"Image {i + 1}/{assets.Count}: {name}");
                 try
                 {
@@ -226,7 +228,7 @@ public static class ExportCommand
         {
             var available = assets.Where(a => a.Available).ToArray();
             foreach (var asset in assets.Except(available))
-                Failures.Add(new(AssetLabels.Id(asset), AssetLabels.Name(asset), asset.Entry.Limitation ?? "Not extractable with the current decoders."));
+                Failures.Add(new(_ids[asset], AssetLabels.Name(asset), asset.Entry.Limitation ?? "Not extractable with the current decoders."));
             if (available.Length == 0) return 0;
             var progress = new Progress<ExtractionProgress>(p => _reporter.Progress($"Extracting {p.CompletedFiles}/{p.TotalFiles}: {p.CurrentFile}"));
             try
