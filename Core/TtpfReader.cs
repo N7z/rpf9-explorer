@@ -177,7 +177,7 @@ public static class TtpfReader
     static Index ReadIndexCached(string path, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        path = Path.GetFullPath(path); var file = new FileInfo(path);
+        path = LocalPath.Require(path); var file = new FileInfo(path);
         long length = file.Length; DateTime written = file.LastWriteTimeUtc;
         var c = Volatile.Read(ref lastIndex);
         if (c != null && c.Path == path && c.Length == length && c.Written == written) return c.Index;
@@ -191,7 +191,7 @@ public static class TtpfReader
 
     internal static Index ReadIndex(string path, CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested(); path = Path.GetFullPath(path);
+        ct.ThrowIfCancellationRequested(); path = LocalPath.Require(path);
         using var input = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
         long fileSize = input.Length; if (fileSize < 256) throw new InvalidDataException("Truncated RDS5 header.");
         byte[] header = new byte[24]; input.ReadExactly(header);

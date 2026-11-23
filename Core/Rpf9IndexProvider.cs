@@ -25,7 +25,7 @@ public sealed class Rpf9IndexProvider
 
     public static Rpf9IndexProvider Load(string configurationPath)
     {
-        using var file = File.OpenRead(configurationPath);
+        using var file = File.OpenRead(LocalPath.Require(configurationPath));
         if (file.Length is < 2 or > 65536) throw new InvalidDataException("Invalid decoder configuration size.");
         Configuration settings;
         try { settings = JsonSerializer.Deserialize<Configuration>(file, Json) ?? throw new InvalidDataException("Decoder configuration is empty."); }
@@ -38,8 +38,7 @@ public sealed class Rpf9IndexProvider
 
     private static bool LocalFile(string? path, string extension) =>
         !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path)
-        && !Path.GetFullPath(path).StartsWith("\\\\", StringComparison.Ordinal)
-        && Path.GetExtension(path).Equals(extension, StringComparison.OrdinalIgnoreCase) && File.Exists(path);
+        && Path.GetExtension(path).Equals(extension, StringComparison.OrdinalIgnoreCase) && File.Exists(LocalPath.Require(path));
 
     internal ArchiveDocument Open(string path, int[] trail, long expectedBase, long expectedSize,
         string label, ArchiveDocument? parent, CancellationToken token)
@@ -100,8 +99,9 @@ public sealed class Rpf9IndexProvider
             || row.Hash32 != null && !ValidHash(row.Hash32, 8) || row.Hash64 != null && !ValidHash(row.Hash64, 16))
             throw new InvalidDataException("Decoder returned invalid member metadata.");
         bool raw = row.Mode == "raw", chunked = row.Mode is "chunked" or "resource_chunked";
+        bool deflate = row.Mode == "deflate";
         bool resource = row.Mode == "resource_chunked";
-        if (raw || chunked)
+        if (raw || chunked || deflate)
         {
             long dataBase = checked(source.BaseOffset + source.HeaderSize);
             if (row.Offset == null || row.StoredBytes == null || row.DecodedBytes == null || decoded < 0
@@ -111,7 +111,7 @@ public sealed class Rpf9IndexProvider
         if (raw && (decoded > stored || stored - decoded > 15 || row.Counter || row.PrefixBytes != 0 || row.Blocks.Length != 0))
             throw new InvalidDataException("Invalid directly stored member extent.");
         if (resource && (row.SystemBytes is null or < 0 || row.GraphicsBytes is null or < 0
-                         || decoded != (long)row.SystemBytes.Value + row.GraphicsBytes.Value || row.PrefixBytes != 16 || row.Counter)
+                         || decoded != (long)row.SystemBytes.Value + row.GraphicsBytes.Value || row.PrefixBytes != 16)
             || chunked && !resource && row.PrefixBytes != 0)
             throw new InvalidDataException("Invalid resource section boundaries.");
         ArchiveSegment[]? segments = null;
@@ -134,8 +134,10 @@ public sealed class Rpf9IndexProvider
             if (decodedTotal != decoded || offset + stored - position > 15)
                 throw new InvalidDataException("Indexed chunk lengths do not match the enclosing member.");
         }
-        else if (row.Blocks.Length != 0 || row.Counter && !chunked)
+        else if (row.Blocks.Length != 0 || row.Counter && !chunked && !deflate)
             throw new InvalidDataException("Unexpected indexed compression blocks.");
+        if (deflate && (stored == 0 || decoded == 0 || row.PrefixBytes != 0))
+            throw new InvalidDataException("Invalid indexed raw DEFLATE extent.");
 
         string extension = row.Extension is ".rpf" or ".bk2" or ".bik" or ".awc" or ".r9resource" ? row.Extension : ".bin";
         string? candidate = SafeCandidate(row.Candidate);
@@ -151,18 +153,20 @@ public sealed class Rpf9IndexProvider
             (true, _, "audio") => "Recovered AWC",
             (true, _, "archive") => "Indexed child archive",
             (true, _, _) => "Indexed stored",
+            (_, _, _) when deflate => row.Counter ? "Indexed counter and DEFLATE" : "Indexed DEFLATE",
+            (_, true, _) when row.Counter => "Indexed encrypted resource",
             (_, true, _) => "Indexed resource",
             _ => row.Counter ? "Indexed counter and chunks" : "Indexed chunks"
         };
-        string? limitation = !raw && !chunked ? $"This indexed storage layout is unavailable ({row.Mode})."
-            : row.Counter && decoded > MaxDecodedPayload ? "This transformed member exceeds the local decoder limit." : null;
+        string? limitation = !raw && !chunked && !deflate ? $"This indexed storage layout is unavailable ({row.Mode})."
+            : (row.Counter || deflate) && decoded > MaxDecodedPayload ? "This member exceeds the local decoder limit." : null;
         return new(path, stored, decoded, offset, false, false, resource, compression, row.Slot)
         {
             Limitation = limitation,
             Segments = segments,
             ResourceSystemBytes = row.SystemBytes,
             NameHash32 = row.Hash32, NameHash64 = row.Hash64, IsNameCandidate = candidate != null,
-            IsNestedArchive = raw && row.Kind == "archive", RequiresIndexDecoder = row.Counter,
+            IsNestedArchive = raw && row.Kind == "archive", RequiresIndexDecoder = row.Counter || deflate,
             IndexedPrefixBytes = row.PrefixBytes
         };
     }
@@ -203,6 +207,11 @@ public sealed class Rpf9IndexProvider
     private async Task RunAsync(string path, int[] trail, List<string> command, Stream output, long limit, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        LocalPath.Require(path);
+        LocalPath.Require(_settings.Python);
+        LocalPath.Require(_settings.Script);
+        LocalPath.Require(_settings.Executable);
+        if (_settings.Names != null) LocalPath.Require(_settings.Names);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(2));
         var start = new ProcessStartInfo(_settings.Python)
@@ -210,6 +219,7 @@ public sealed class Rpf9IndexProvider
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             WorkingDirectory = Path.GetDirectoryName(_settings.Script)!
         };
+        start.Environment["RPF9_EXPLORER_EXTENDED_STORAGE"] = "1";
         foreach (string arg in new[] { "-B", _settings.Script, "--executable", _settings.Executable, "--archive", path }) start.ArgumentList.Add(arg);
         foreach (int slot in trail) { start.ArgumentList.Add("--inside"); start.ArgumentList.Add(slot.ToString(CultureInfo.InvariantCulture)); }
         foreach (string arg in command) start.ArgumentList.Add(arg);

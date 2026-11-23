@@ -154,12 +154,5 @@ public sealed class AssetWorkspaceProject
         return new(path, file.Length, File.GetLastWriteTimeUtc(path).Ticks, Hash(header), null);
     }
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
-    private static void GuardLinks(string path)
-    {
-        for (string? at = Path.GetFullPath(path); at != null; at = Path.GetDirectoryName(at))
-        {
-            if ((File.Exists(at) || Directory.Exists(at)) && (File.GetAttributes(at) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("Workspace projects cannot use links or junctions.");
-        }
-    }
+    private static void GuardLinks(string path) => LocalPath.Require(path);
 }

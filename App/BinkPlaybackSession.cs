@@ -26,12 +26,13 @@ internal sealed class BinkPlaybackSession : IDisposable
         var helper = new[] {
             Path.Combine(AppContext.BaseDirectory, "Tools", "bink-player.exe"),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Tools", "bink-player.exe"))
-        }.FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("Keep Tools\\bink-player.exe beside rpf9-explorer.exe to play movies.");
+        }.Select(RpfPreview.Core.LocalPath.Require).FirstOrDefault(File.Exists)
+            ?? throw new FileNotFoundException("Keep Tools\\bink-player.exe beside rpf9-explorer.exe to play movies.");
         var start = new ProcessStartInfo(helper) {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
         };
-        start.ArgumentList.Add(path);
+        start.ArgumentList.Add(RpfPreview.Core.LocalPath.Require(path));
         start.ArgumentList.Add("0x" + offset.ToString("X"));
         start.ArgumentList.Add("0x" + length.ToString("X"));
         _process = new Process { StartInfo = start };

@@ -13,8 +13,11 @@ public partial class MainWindow
 
     private void LoadIndexedDecoder()
     {
-        if (!File.Exists(DecoderConfigurationPath)) return;
-        try { _indexProvider = Rpf9IndexProvider.Load(DecoderConfigurationPath); }
+        try
+        {
+            string path = LocalPath.Require(DecoderConfigurationPath);
+            if (File.Exists(path)) _indexProvider = Rpf9IndexProvider.Load(path);
+        }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
         { StatusText.Text = "Local RPF9 decoder unavailable: " + ex.Message; }
     }
@@ -32,7 +35,7 @@ public partial class MainWindow
         try
         {
             var provider = Rpf9IndexProvider.Load(dialog.FileName);
-            string target = DecoderConfigurationPath;
+            string target = LocalPath.Require(DecoderConfigurationPath);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             if (!Path.GetFullPath(dialog.FileName).Equals(target, StringComparison.OrdinalIgnoreCase))
             {
@@ -52,7 +55,7 @@ public partial class MainWindow
         if (_busy) return;
         try
         {
-            File.Delete(DecoderConfigurationPath);
+            File.Delete(LocalPath.Require(DecoderConfigurationPath));
             _indexProvider = null;
             StatusText.Text = "Recovery scans enabled for the next archive you open.";
         }

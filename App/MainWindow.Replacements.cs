@@ -269,7 +269,8 @@ public partial class MainWindow
 
     private async Task PreviewReplacementAudioAsync(string path, CancellationToken token)
     {
-        string output = Path.Combine(Path.GetTempPath(), "RpfPreview-staged-" + Guid.NewGuid().ToString("N") + ".wav");
+        path = LocalPath.Require(path);
+        string output = LocalPath.Require(Path.Combine(Path.GetTempPath(), "RpfPreview-staged-" + Guid.NewGuid().ToString("N") + ".wav"));
         bool retained = false;
         try
         {
@@ -325,7 +326,7 @@ public partial class MainWindow
                 Filter = "Decoded native resource bundle|*.r9texdata", DefaultExt = ".r9texdata",
                 FileName = Path.GetFileNameWithoutExtension(replacement.OriginalFileName) + "-native-replacement.r9texdata" };
             if (dialog.ShowDialog(this) != true) return;
-            string output = Path.GetFullPath(dialog.FileName);
+            string output = LocalPath.Require(dialog.FileName);
             if (new[] { document.SourcePath, assetPath, _replacementWorkspace.ProjectPath }.Any(p => string.Equals(output, p, StringComparison.OrdinalIgnoreCase)))
                 throw new IOException("Choose a separate output file.");
             await File.WriteAllBytesAsync(output, result.ResourceData);
@@ -353,7 +354,7 @@ public partial class MainWindow
     {
         if (_document?.Format != "RDS5" || _replacementWorkspace == null) throw new InvalidOperationException("No source texture pool is open.");
         string input = _replacementWorkspace.AssetPath(replacement), source = _document.SourcePath;
-        string output = Path.GetFullPath(destination);
+        string output = LocalPath.Require(destination);
         if (new[] { source, input, _replacementWorkspace.ProjectPath }.Any(p => string.Equals(output, p, StringComparison.OrdinalIgnoreCase)))
             throw new IOException("Choose a new output file separate from the source and project.");
         var drive = new DriveInfo(Path.GetPathRoot(output)!);

@@ -30,6 +30,21 @@ Of the directly stored members, 797 had Bink movie headers and frame tables that
 
 The survey decoded headers for all 4,351 directly stored child archives found in the standalone indexes. Those children contain 1,248,505 entry slots. Full payload checks for nested resources covered the `packs.rpf` children.
 
+## Encrypted and compressed storage
+
+Across the 22 standalone and 4,351 directly stored child indexes, 1,398 members carried an explicit payload encryption descriptor. Every observed descriptor used type 17 with flag 4. Full reads validated every one of those members.
+
+| Verified storage | Members |
+| --- | ---: |
+| Encrypted chunked data | 648 |
+| Encrypted chunked resources | 746 |
+| Encrypted raw DEFLATE | 4 |
+| Clear raw DEFLATE | 157 |
+| Layout 4 chunked resources | 14,432 |
+| Layout 4 chunked data | 56 |
+
+Encrypted resources have a 16-byte clear prefix. The counter starts at the first byte after that prefix. Raw DEFLATE streams end at their declared decoded size and have up to 15 bytes of zero alignment padding. Layout 4 encodes each chunk's decoded length, padded stored length, padding and codec in an eight-byte record.
+
 ## Header signatures
 
 A separate pass verified the signatures of all 22 standalone headers and all 4,351 observed child headers with the RSA-2048 public key embedded in the analyzed build. The format uses PKCS #1 v1.5 with double SHA-256 over selected header ranges after the first transform. Controlled changes to covered bytes failed verification. These checks cover the signed header ranges. The key came from the local executable and its provenance was not independently established.

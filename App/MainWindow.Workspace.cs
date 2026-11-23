@@ -23,7 +23,7 @@ public partial class MainWindow
     private sealed record MoreTextures(TreeViewItem Parent, ArchiveDocument Source, int Skip);
 
     private static IEnumerable<string> DirectorySources(string path)
-        => Directory.EnumerateFiles(path, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint })
+        => Directory.EnumerateFiles(LocalPath.Require(path), "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = LocalPath.RemoteAttributes })
             .Where(p => Path.GetExtension(p).ToLowerInvariant() is ".rpf" or ".ttpf" or ".zip").Order(StringComparer.OrdinalIgnoreCase);
 
     private async void OpenFolder_Click(object sender, RoutedEventArgs e)
@@ -46,7 +46,13 @@ public partial class MainWindow
     private async Task<bool> OpenSourcesAsync(IEnumerable<string> paths, bool append, string? directory = null, bool forceRecovery = false)
     {
         if (_busy) return false;
-        string[] requested = paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).Take(513).ToArray();
+        string[] requested;
+        try { requested = paths.Select(LocalPath.Require).Distinct(StringComparer.OrdinalIgnoreCase).Take(513).ToArray(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            StatusText.Text = "Could not load sources: " + ex.Message;
+            return false;
+        }
         if (requested.Length == 0) { StatusText.Text = "No RPF, ZIP or TTPF files were found."; return false; }
         if (requested.Length > 512) { StatusText.Text = "Open at most 512 sources in a workspace."; return false; }
         var loaded = append ? new Dictionary<string, ArchiveDocument>(_documents, StringComparer.OrdinalIgnoreCase) : new(StringComparer.OrdinalIgnoreCase);

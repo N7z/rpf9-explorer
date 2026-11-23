@@ -85,7 +85,7 @@ public partial class MainWindow
             if (dialog.ShowDialog(window) != true) return;
             try
             {
-                var file = new FileInfo(dialog.FileName);
+                var file = new FileInfo(LocalPath.Require(dialog.FileName));
                 if (file.Length is < 96 or > RageWardrobeCatalog.MaxBytes) throw new InvalidDataException("The catalogue file exceeds the supported size.");
                 var parsed = RageWardrobeCatalog.Decode(File.ReadAllBytes(file.FullName)) ?? throw new InvalidDataException("This is not a complete, supported wardrobe catalogue.");
                 choices.Add(new(file.Name, parsed)); catalogues.ItemsSource = choices.ToArray(); catalogues.SelectedIndex = choices.Count - 1;

@@ -38,7 +38,7 @@ internal sealed class AudioPlaybackSession : IDisposable
         };
         _timer.Tick += (_, _) => Notify();
         _media.Volume = .6;
-        _media.Open(new Uri(Path.GetFullPath(pcmPath)));
+        _media.Open(new Uri(RpfPreview.Core.LocalPath.Require(pcmPath)));
     }
 
     public void Play()

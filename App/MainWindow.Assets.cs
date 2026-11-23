@@ -235,9 +235,9 @@ public partial class MainWindow
         AssetExportButton.IsEnabled = false; VideoControls.Visibility = Visibility.Collapsed;
         var stream = _audioInfo.Streams.Single(s => s.Index == index);
         if (!stream.SupportsPreview) throw new NotSupportedException($"Audio codec 0x{stream.Codec:X2} is not supported by the current preview decoder.");
-        var source = _audioDocument.SourcePath; var entry = _audioEntry;
+        var source = LocalPath.Require(_audioDocument.SourcePath); var entry = _audioEntry;
         var helper = FindPreviewTool(stream.Codec == 5 ? "ffmpeg.exe" : "opus-preview.exe");
-        string output = Path.Combine(Path.GetTempPath(), "RpfPreview-audio-" + Guid.NewGuid().ToString("N") + ".wav");
+        string output = LocalPath.Require(Path.Combine(Path.GetTempPath(), "RpfPreview-audio-" + Guid.NewGuid().ToString("N") + ".wav"));
         string? xma = null;
         bool retained = false;
         PreviewFootnoteText.Text = "Decoding audio preview…";
@@ -346,8 +346,8 @@ public partial class MainWindow
     private static string FindPreviewTool(string name) => new[] {
         Path.Combine(AppContext.BaseDirectory, "Tools", name),
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Tools", name))
-    }.Concat(name == "ffmpeg.exe" ? (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator).Where(p => p.Length > 0).Select(p => Path.Combine(p, name)) : Array.Empty<string>())
-        .FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("The preview tool is missing: Tools\\" + name);
+    }.Select(LocalPath.Require).FirstOrDefault(File.Exists)
+        ?? throw new FileNotFoundException("The preview tool is missing: Tools\\" + name);
 
     private void AssetExport_Click(object sender, RoutedEventArgs e)
     {
@@ -359,12 +359,13 @@ public partial class MainWindow
             name = new string(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).ToArray());
             var dialog = new SaveFileDialog { Title = texture ? "Export texture" : "Save decoded audio preview", Filter = texture ? "DDS texture|*.dds" : "PCM wave audio|*.wav", FileName = name, DefaultExt = texture ? ".dds" : ".wav" };
             if (dialog.ShowDialog(this) != true) return;
-            if ((_document != null && string.Equals(Path.GetFullPath(dialog.FileName), _document.SourcePath, StringComparison.OrdinalIgnoreCase)) || _modelAssemblySourcePaths.Contains(Path.GetFullPath(dialog.FileName))) throw new IOException("Choose a filename different from every source archive.");
-            if (poolTexture) File.WriteAllBytes(dialog.FileName, TtpfReader.CreateDds(_ttpfInfo!.SourcePath, _ttpfTextureIndex));
-            else if (texture) File.WriteAllBytes(dialog.FileName, RageTextureDecoder.CreateDds(_textureSystem!, _textureGraphics!, ((AssetChoice)AssetSelector.SelectedItem).Index));
-            else if (_audioPlayer != null) File.Copy(_audioPlayer.PcmPath, dialog.FileName, true);
+            string output = LocalPath.Require(dialog.FileName);
+            if ((_document != null && string.Equals(output, _document.SourcePath, StringComparison.OrdinalIgnoreCase)) || _modelAssemblySourcePaths.Contains(output)) throw new IOException("Choose a filename different from every source archive.");
+            if (poolTexture) File.WriteAllBytes(output, TtpfReader.CreateDds(_ttpfInfo!.SourcePath, _ttpfTextureIndex));
+            else if (texture) File.WriteAllBytes(output, RageTextureDecoder.CreateDds(_textureSystem!, _textureGraphics!, ((AssetChoice)AssetSelector.SelectedItem).Index));
+            else if (_audioPlayer != null) File.Copy(_audioPlayer.PcmPath, output, true);
             else throw new InvalidOperationException("No decoded audio preview is available.");
-            StatusText.Text = "Saved " + dialog.FileName;
+            StatusText.Text = "Saved " + output;
         }
         catch (Exception ex) { StatusText.Text = "Export failed: " + ex.Message; }
     }
@@ -375,8 +376,9 @@ public partial class MainWindow
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            if ((_document != null && string.Equals(Path.GetFullPath(dialog.FileName), _document.SourcePath, StringComparison.OrdinalIgnoreCase)) || _modelAssemblySourcePaths.Contains(Path.GetFullPath(dialog.FileName))) throw new IOException("Choose a filename different from every source archive.");
-            File.WriteAllText(dialog.FileName, RageModelDecoder.CreateObj(_decodedModel)); StatusText.Text = "Saved " + dialog.FileName;
+            string output = LocalPath.Require(dialog.FileName);
+            if ((_document != null && string.Equals(output, _document.SourcePath, StringComparison.OrdinalIgnoreCase)) || _modelAssemblySourcePaths.Contains(output)) throw new IOException("Choose a filename different from every source archive.");
+            File.WriteAllText(output, RageModelDecoder.CreateObj(_decodedModel)); StatusText.Text = "Saved " + output;
         }
         catch (Exception ex) { StatusText.Text = "Export failed: " + ex.Message; }
     }

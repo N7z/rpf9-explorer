@@ -17,7 +17,7 @@ public partial class MainWindow
         var candidates = _loadedResidentNames.TryGetValue(nameHash, out var loaded) ? loaded.ToList() : [];
         string root = StreamingTextureCatalog.FindContentDirectory(modelDocument.SourcePath) ?? Path.GetDirectoryName(modelDocument.SourcePath)!;
         string[] paths = new[] { Path.Combine(Path.GetDirectoryName(modelDocument.SourcePath)!, "textures.rpf"), Path.Combine(root, "textures.rpf"),
-            Path.Combine(root, "pack", "core_restofworld", "core_restofworld.rpf") }.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            Path.Combine(root, "pack", "core_restofworld", "core_restofworld.rpf") }.Where(LocalPath.FileExists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         bool current = _defaultResidentRoot == root && paths.Length == _defaultResidentSources.Count && paths.All(p =>
             _defaultResidentSources.TryGetValue(p, out var stamp) && stamp.Length == new FileInfo(p).Length && stamp.Write == File.GetLastWriteTimeUtc(p).Ticks);
         if (!current)

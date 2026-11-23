@@ -46,7 +46,17 @@ public partial class MainWindow : Window
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         int selectFlag = Array.IndexOf(_arguments, "--select");
-        var paths = _arguments.Take(selectFlag < 0 ? _arguments.Length : selectFlag).Where(p => File.Exists(p) || Directory.Exists(p)).ToArray();
+        string[] paths;
+        try
+        {
+            paths = _arguments.Take(selectFlag < 0 ? _arguments.Length : selectFlag)
+                .Select(LocalPath.Require).Where(p => File.Exists(p) || Directory.Exists(p)).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            StatusText.Text = "Could not load sources: " + ex.Message;
+            return;
+        }
         bool opened = paths.Length == 1 ? await OpenArchiveAsync(paths[0]) : paths.Length > 1 && await OpenSourcesAsync(paths.SelectMany(p => Directory.Exists(p) ? DirectorySources(p) : new[] { p }), false);
         if (opened)
         {
@@ -84,14 +94,20 @@ public partial class MainWindow : Window
         e.Handled = true;
         if (!_busy && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } paths)
         {
-            if (paths.Length == 1 && Path.GetExtension(paths[0]).ToLowerInvariant() is ".rpfproject" or ".rpfworkspace") { await OpenArchiveAsync(paths[0]); return; }
-            try { await OpenSourcesAsync(paths.SelectMany(p => Directory.Exists(p) ? DirectorySources(p) : new[] { p }), true, paths.FirstOrDefault(Directory.Exists)); }
+            try
+            {
+                var localPaths = paths.Select(LocalPath.Require).ToArray();
+                if (localPaths.Length == 1 && Path.GetExtension(localPaths[0]).ToLowerInvariant() is ".rpfproject" or ".rpfworkspace")
+                { await OpenArchiveAsync(localPaths[0]); return; }
+                await OpenSourcesAsync(localPaths.SelectMany(p => Directory.Exists(p) ? DirectorySources(p) : new[] { p }), true, localPaths.FirstOrDefault(Directory.Exists));
+            }
             catch (Exception ex) { StatusText.Text = "Could not load dropped sources: " + ex.Message; }
         }
     }
 
     private async Task<bool> OpenArchiveAsync(string path)
     {
+        path = LocalPath.Require(path);
         if (Path.GetExtension(path).Equals(".rpfworkspace", StringComparison.OrdinalIgnoreCase)) return await OpenSavedWorkspaceAsync(path);
         if (Path.GetExtension(path).Equals(".rpfproject", StringComparison.OrdinalIgnoreCase)) return await OpenReplacementProjectAsync(path);
         if (Directory.Exists(path)) return await OpenSourcesAsync(DirectorySources(path), false, path);
@@ -311,10 +327,12 @@ public partial class MainWindow : Window
         var folder = new OpenFolderDialog { Title = "Choose where to create the extracted archive folder", Multiselect = false };
         if (folder.ShowDialog(this) != true) return;
         var stem = (_documents.Count == 1 ? Path.GetFileNameWithoutExtension(_document.SourcePath) : "Workspace") + "_extracted";
-        var destination = Path.Combine(folder.FolderName, stem);
-        for (var counter = 2; Directory.Exists(destination) || File.Exists(destination); counter++) destination = Path.Combine(folder.FolderName, stem + "_" + counter);
         try
         {
+            var root = LocalPath.Require(folder.FolderName);
+            var destination = LocalPath.Require(Path.Combine(root, stem));
+            for (var counter = 2; Directory.Exists(destination) || File.Exists(destination); counter++)
+                destination = LocalPath.Require(Path.Combine(root, stem + "_" + counter));
             var fileCount = entries.Length;
             var size = entries.Sum(x => x.Size);
             var drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(destination))!);
@@ -351,11 +369,12 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            if (string.Equals(Path.GetFullPath(dialog.FileName), Path.GetFullPath(_document.SourcePath), StringComparison.OrdinalIgnoreCase))
+            string output = LocalPath.Require(dialog.FileName);
+            if (string.Equals(output, _document.SourcePath, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a report filename different from the opened archive.");
             var report = new { inspectedAtUtc = DateTime.UtcNow, source = _document.SourcePath, format = _document.Format, bytes = _document.FileSize, supportsMembers = _document.SupportsMembers, originalIndexDecoded = _document.SupportsMembers && !IsRecovery, limitation = _document.Limitation, metadata = _document.Metadata, headerHex = Convert.ToHexString(_document.HeaderBytes), membersDecoded = IsRecovery ? null : (int?)_document.Entries.Count, recoveredEntries = IsRecovery ? (int?)_document.Entries.Count : null };
-            File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
-            StatusText.Text = "Inspection report saved to " + dialog.FileName;
+            File.WriteAllText(output, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            StatusText.Text = "Inspection report saved to " + output;
         }
         catch (Exception ex) { StatusText.Text = "Could not save report: " + ex.Message; }
     }

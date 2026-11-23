@@ -165,7 +165,9 @@ The publish script creates `dist/rpf9-explorer.exe` as a self-contained Windows 
 
 `Tools/BinkPreview.cpp`, `Tools/BinkPlayer.cpp`, and `Tools/OpusPreview.cpp` contain the helper source. Their `Build-*.ps1` scripts require Visual C++ and the Windows SDK. Adjust the compiler and SDK paths in those scripts for your installation.
 
-Bink requires a separately installed licensed Unreal Bink SDK. Opus requires libopus headers and a library. Those external SDKs are not included. Build the helpers before running `build.ps1` to copy them into the published `Tools` folder. For XMA2 audio, put a compatible `ffmpeg.exe` in `Tools` before publishing.
+Bink requires a separately installed licensed Unreal Bink SDK. Opus requires libopus headers and a library. Those external SDKs are not included. Build the helpers before running `build.ps1` to copy them into the published `Tools` folder.
+
+For XMA2 and WAV previews, put an FFmpeg build configured with `--disable-network` and only the `file,pipe` protocols in `Tools` before publishing. The publish script checks both settings. The app loads preview helpers from the local `Tools` folder.
 
 The Windows 1.3 build uses libopus 1.6.1. To use your own static libopus build, pass `-OpusRoot` (the folder containing `include/opus.h`) and `-OpusLibrary` (the x64 `/MT` static library) to `Tools/Build-OpusPreview.ps1`. Compiler and Windows SDK paths can also be supplied as parameters.
 

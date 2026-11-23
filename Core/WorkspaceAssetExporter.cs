@@ -87,9 +87,5 @@ public static class WorkspaceAssetExporter
         var chars = name.Select(c => Path.GetInvalidFileNameChars().Contains(c) || char.IsControl(c) ? '_' : c).ToArray();
         string value = new string(chars).Trim(' ', '.'); return value.Length == 0 ? "asset" : value[..Math.Min(140, value.Length)];
     }
-    private static void GuardDirectory(string path)
-    {
-        for (DirectoryInfo? dir = new(Path.GetFullPath(path)); dir != null; dir = dir.Parent)
-            if (dir.Exists && (dir.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Extraction through links or junctions is unsupported.");
-    }
+    private static void GuardDirectory(string path) => LocalPath.Require(path);
 }

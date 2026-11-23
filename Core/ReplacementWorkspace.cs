@@ -298,15 +298,7 @@ public sealed class ReplacementWorkspace
         if (!string.Equals(Path.GetExtension(path), ".rpfproject", StringComparison.OrdinalIgnoreCase)) throw Invalid("Use the .rpfproject extension for replacement projects.");
         return path;
     }
-    private static void EnsureNoReparse(string path)
-    {
-        for (string? at = Path.GetFullPath(path); at is not null; at = Path.GetDirectoryName(at))
-        {
-            try { if ((File.GetAttributes(at) & FileAttributes.ReparsePoint) != 0) throw new IOException("Workspace access through a symbolic link or junction is not supported."); }
-            catch (FileNotFoundException) { }
-            catch (DirectoryNotFoundException) { }
-        }
-    }
+    private static void EnsureNoReparse(string path) => LocalPath.Require(path);
     private static string SafeExtension(string path)
     { string ext = Path.GetExtension(path).ToLowerInvariant(); return ext.Length is >= 2 and <= 17 && ext[1..].All(char.IsAsciiLetterOrDigit) ? ext : ".bin"; }
     private static string SafeLabel(string? text, int limit) => new((text ?? "").Where(c => !char.IsControl(c)).Take(limit).ToArray());

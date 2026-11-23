@@ -14,6 +14,7 @@ public static class ArchiveReader
     {
         ValidateEntry(document, entry);
         if (!entry.Compression.StartsWith("Recovered Bink", StringComparison.Ordinal)) return null;
+        LocalPath.Require(document.SourcePath);
         if (document.IndexedRpf9Source is { } indexed)
         {
             using var source = File.Open(document.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
@@ -25,7 +26,7 @@ public static class ArchiveReader
 
     public static ArchiveDocument Open(string path, Rpf9IndexProvider? indexProvider = null, CancellationToken token = default)
     {
-        path = System.IO.Path.GetFullPath(path);
+        path = LocalPath.Require(path);
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
         if (stream.Length < 4) throw new InvalidDataException("The file is too short to contain an archive header.");
         var header = new byte[(int)Math.Min(stream.Length, 4096)];
@@ -58,6 +59,7 @@ public static class ArchiveReader
         ValidateEntry(parent, entry);
         if (parent.IndexedRpf9Source is not { } indexed || !entry.IsNestedArchive || indexed.Trail.Length >= 16)
             throw new NotSupportedException("Select a directly stored nested RPF9 archive within the depth limit.");
+        LocalPath.Require(parent.SourcePath);
         using var stream = File.Open(parent.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
         indexed.CheckHeader(stream, parent.FileSize);
         return indexed.Provider.Open(parent.SourcePath, [.. indexed.Trail, entry.Index], entry.Offset, entry.Size,
@@ -452,7 +454,7 @@ public static class ArchiveReader
         var targets = entries.Select(e => SafeDestination(destination, e.Path)).ToArray();
         if (targets.Distinct(StringComparer.OrdinalIgnoreCase).Count() != targets.Length)
             throw new InvalidDataException("Extraction paths collide.");
-        if (targets.Any(File.Exists)) throw new IOException("A destination file already exists. Choose a new, empty destination folder.");
+        if (targets.Any(path => File.Exists(LocalPath.Require(path)))) throw new IOException("A destination file already exists. Choose a new, empty destination folder.");
         byte[] buffer = new byte[128 * 1024];
         long copied = 0;
         var progressClock = System.Diagnostics.Stopwatch.StartNew();
@@ -522,12 +524,7 @@ public static class ArchiveReader
         return full;
     }
 
-    private static void EnsureNoReparsePoints(string path)
-    {
-        for (DirectoryInfo? dir = new(System.IO.Path.GetFullPath(path)); dir is not null; dir = dir.Parent)
-            if (dir.Exists && (dir.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("Extraction through symbolic links or junctions is not supported.");
-    }
+    private static void EnsureNoReparsePoints(string path) => LocalPath.Require(path);
 
     private sealed class Source(Stream content, IDisposable? owner = null) : IDisposable
     {
@@ -582,6 +579,7 @@ public static class ArchiveReader
     private static Source OpenSource(ArchiveDocument doc, ArchiveEntry entry, CancellationToken token = default, long previewLimit = long.MaxValue)
     {
         token.ThrowIfCancellationRequested();
+        LocalPath.Require(doc.SourcePath);
         if (doc.Format == "RDS5")
         {
             if (new FileInfo(doc.SourcePath).Length != doc.FileSize) throw new InvalidDataException("Texture pool size changed since it was opened.");

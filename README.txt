@@ -226,13 +226,13 @@ Tests include generated malformed/truncated fixtures and real resource/hash
 comparisons, independent texture detiling and packed-vertex regressions. Native
 PCM and actual WPF preview/playback checks are retained under Verification.
 No downloaded game program, DLL, script or shader is executed. Native preview
-tools are built locally with trusted installed SDKs; FFmpeg is a separate local
-codec process. Microsoft Defender scan results are in SCAN-RESULTS.txt; a clean
-scan is not a guarantee of safety or authenticity.
+tools are built locally with trusted installed SDKs. FFmpeg is a separate codec
+process built with networking disabled and only the file and pipe protocols.
+Archives, decoder files, and extraction destinations must be on local drives.
 
 Third-party notices and licenses are in Licenses. BCnEncoder.Net 2.3.0 and
 CommunityToolkit.HighPerformance 8.4.0 are pinned. AMD address-layout attribution,
-libopus and the separate FFmpeg GPLv3 build/license/source notices are included.
+libopus and the separate FFmpeg build and license notices are included.
 No downloaded game assets or game decryption keys are bundled with this app.
 
 EXTERNAL BCPACK HISTORY

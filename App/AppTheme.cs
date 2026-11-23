@@ -1,3 +1,4 @@
+using RpfPreview.Core;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -16,7 +17,7 @@ internal static class AppTheme
         bool dark = false;
         try
         {
-            var file = new FileInfo(PreferencePath);
+            var file = new FileInfo(LocalPath.Require(PreferencePath));
             if (file.Exists && file.Length <= 4096)
                 dark = JsonSerializer.Deserialize<Preference>(File.ReadAllText(file.FullName))?.DarkMode == true;
         }
@@ -27,9 +28,11 @@ internal static class AppTheme
     public static bool Set(bool dark)
     {
         Apply(dark);
-        string path = PreferencePath, temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        string? temporary = null;
         try
         {
+            string path = LocalPath.Require(PreferencePath);
+            temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(temporary, JsonSerializer.Serialize(new Preference(dark)));
             File.Move(temporary, path, true);
@@ -38,7 +41,7 @@ internal static class AppTheme
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
         finally
         {
-            try { if (File.Exists(temporary)) File.Delete(temporary); }
+            try { if (temporary != null && File.Exists(temporary)) File.Delete(temporary); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
     }

@@ -2,6 +2,24 @@ param([string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'))
 $ErrorActionPreference = 'Stop'
 $rpfProjectRoot = $PSScriptRoot
 $rpfPublishPath = [IO.Path]::GetFullPath($OutputDirectory)
+$rpfOfflineFfmpeg = Join-Path $rpfProjectRoot 'Tools\ffmpeg.exe'
+if (!(Test-Path -LiteralPath $rpfOfflineFfmpeg)) {
+    $rpfOfflineFfmpeg = Join-Path $rpfPublishPath 'Tools\ffmpeg.exe'
+}
+if (Test-Path -LiteralPath $rpfOfflineFfmpeg) {
+    $rpfFfmpegConfiguration = & {
+        $ErrorActionPreference = 'Continue'
+        & $rpfOfflineFfmpeg -hide_banner -buildconf 2>&1 | ForEach-Object { $_.ToString() }
+    }
+    if ($LASTEXITCODE -ne 0 -or !($rpfFfmpegConfiguration -match '^\s*--disable-network\s*$')) {
+        throw 'Build Tools\ffmpeg.exe with --disable-network before publishing.'
+    }
+    $rpfFfmpegProtocols = & $rpfOfflineFfmpeg -hide_banner -protocols
+    $rpfProtocolNames = $rpfFfmpegProtocols | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notin @('Supported file protocols:', 'Input:', 'Output:') }
+    if ($LASTEXITCODE -ne 0 -or 'file' -notin $rpfProtocolNames -or 'pipe' -notin $rpfProtocolNames -or ($rpfProtocolNames | Where-Object { $_ -notin @('file', 'pipe') })) {
+        throw 'Enable only the file and pipe protocols in Tools\ffmpeg.exe.'
+    }
+}
 dotnet publish (Join-Path $rpfProjectRoot 'App\RpfPreview.App.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $rpfPublishPath --nologo
 if ($LASTEXITCODE -ne 0) { throw 'rpf9-explorer publish failed.' }
 Copy-Item -LiteralPath (Join-Path $rpfProjectRoot 'README.txt') -Destination (Join-Path $rpfPublishPath 'README.txt')
