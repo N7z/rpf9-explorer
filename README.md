@@ -4,6 +4,8 @@ A Windows desktop viewer for RPF archives and game assets. Open multiple archive
 
 RPF9 support is partial. The original archive directory is not decoded, and the app cannot rebuild a complete RPF9 archive. Model texture support is still being improved.
 
+See the [RPF9 research notes](docs/rpf9-format-findings.md) for verified progress on decoding the archive index. The desktop app still uses its existing recovery scans.
+
 ## About GTA 6
 
 This is an unofficial project developed while inspecting RPF9 files associated with GTA 6. **The source contains no actual GTA 6 game code.** GTA 6 source code, decompiled game code, game executables, and game scripts are not included.
